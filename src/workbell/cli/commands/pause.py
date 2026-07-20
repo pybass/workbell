@@ -9,7 +9,6 @@ def run(*, core: utils.InjectedCore) -> None:
     interval = core.pause_interval()
     left = interval.duration_sec - interval.worked_sec
     utils.console.print(
-        f"Interval #{interval.id} paused:"
-        f" {format_hms(interval.worked_sec)} of {format_hms(interval.duration_sec)} worked,"
+        f"Interval paused: {format_hms(interval.worked_sec)} of {format_hms(interval.duration_sec)} worked,"
         f" {format_hms(left)} left."
     )

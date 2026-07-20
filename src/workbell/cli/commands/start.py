@@ -18,4 +18,4 @@ def run(duration: str | None = None, *, core: utils.InjectedCore) -> None:
     """
     duration_sec = utils.parse_duration(duration) if duration is not None else core.get_settings().default_duration_sec
     interval = core.start_interval(duration_sec)
-    utils.console.print(f"Interval #{interval.id} started for {format_hms(interval.duration_sec)}.")
+    utils.console.print(f"Interval started for {format_hms(interval.duration_sec)}.")

@@ -20,6 +20,6 @@ def run(*, core: utils.InjectedCore) -> None:
     if active.status is IntervalStatus.RUNNING:  # an absolute ring time exists only while running
         rings_at = f", rings at {datetime.fromtimestamp(now + left, tz=UTC).astimezone():%H:%M}"
     utils.console.print(
-        f"Interval #{active.id} [{utils.STATUS_STYLE[active.status]}]{active.status}[/]:"
+        f"Interval [{utils.STATUS_STYLE[active.status]}]{active.status}[/]:"
         f" {format_hms(worked)} of {format_hms(active.duration_sec)} worked, {format_hms(left)} left{rings_at}."
     )
