@@ -90,6 +90,15 @@ The dead gap is not credited — no work happened; at most one checkpoint
 (~10 s) of real work is lost. `resume_interval` then continues the interval with a
 fresh timer.
 
+## The errors log
+
+The timer and the detached tray have no terminal, so their stdout/stderr go
+to `errors.log` next to the DB (append mode, so concurrent writers are
+safe). Nothing writes to it in normal operation; an unhandled crash leaves
+a timestamped `<process> crashed:` header plus the traceback, and stderr
+from the spawned system tools (afplay, osascript) lands there too. The
+file grows only when something breaks, so it needs no rotation.
+
 ## Concurrency: one rule
 
 The timer and any number of clients share the database (WAL, busy timeout)

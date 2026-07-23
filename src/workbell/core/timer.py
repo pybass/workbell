@@ -18,7 +18,7 @@ from pathlib import Path
 from workbell.core import bell
 from workbell.core.core import Core
 from workbell.core.models import TickResult
-from workbell.core.utils import TIMER_LOCK_FILENAME, acquire_pid_lock
+from workbell.core.utils import TIMER_LOCK_FILENAME, acquire_pid_lock, print_crash_header
 
 POLL_SEC = 1.0  # how often the interval row is re-read
 
@@ -48,4 +48,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # stderr is errors.log (the spawn redirected it): stamp the traceback so the user can date it
+        print_crash_header("timer")
+        raise

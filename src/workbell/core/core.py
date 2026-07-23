@@ -9,7 +9,7 @@ from workbell.core import bell
 from workbell.core.errors import AppError
 from workbell.core.migrations import MIGRATIONS
 from workbell.core.models import DailyStats, Interval, IntervalStatus, Settings, TickResult
-from workbell.core.utils import TIMER_LOCK_FILENAME, lock_holder_pid, unix_now
+from workbell.core.utils import TIMER_LOCK_FILENAME, lock_holder_pid, open_errors_log, unix_now
 
 CHECKPOINT_EVERY_SEC = 10  # a live timer refreshes checkpointed_at at least this often; also max work lost on a crash
 # The dead-timer heal fires only when checkpointed_at is this stale AND timer.lock is free; the
@@ -279,10 +279,14 @@ class Core:
         """Launch the detached timer process that counts the interval down and rings the bell."""
         # S603 suppressed: fixed argv built from sys.executable and our own db path/int id — no
         # shell, no user-controlled strings, nothing an attacker can inject into.
-        subprocess.Popen(  # noqa: S603
-            [sys.executable, "-m", "workbell.core.timer", str(self.db_path), str(interval_id)],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        # stdout/stderr go to errors.log, not DEVNULL: the timer has no terminal, and its crash
+        # traceback must survive somewhere the user can find. The parent handle closes right
+        # after the spawn; the child keeps its inherited descriptor.
+        with open_errors_log(self.db_path.parent) as log:
+            subprocess.Popen(  # noqa: S603
+                [sys.executable, "-m", "workbell.core.timer", str(self.db_path), str(interval_id)],
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from workbell.core.core import Core
-from workbell.core.utils import TRAY_LOCK_FILENAME, acquire_pid_lock
+from workbell.core.utils import TRAY_LOCK_FILENAME, acquire_pid_lock, print_crash_header
 from workbell.tray.controller import TrayController
 
 
@@ -26,4 +26,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # stderr is errors.log (the detached spawn redirected it): stamp the traceback so the user can date it
+        print_crash_header("tray")
+        raise

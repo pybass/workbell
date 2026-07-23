@@ -1,11 +1,19 @@
-"""Tests for the shared core helpers: duration formatting and the PID-stamped flock."""
+"""Tests for the shared core helpers: duration formatting, the errors log, and the PID-stamped flock."""
 
 import fcntl
 import os
+import re
 
 import pytest
 
-from workbell.core.utils import acquire_pid_lock, format_hms, lock_holder_pid
+from workbell.core.utils import (
+    ERRORS_LOG_FILENAME,
+    acquire_pid_lock,
+    format_hms,
+    lock_holder_pid,
+    open_errors_log,
+    print_crash_header,
+)
 
 
 class TestFormatHms:
@@ -28,6 +36,23 @@ class TestFormatHms:
     def test_formats(self, sec, expected):
         """Boundary values on both sides of the minute and hour switches."""
         assert format_hms(sec) == expected
+
+
+class TestErrorsLog:
+    """The shared errors log: append-only opening and the crash header."""
+
+    def test_open_appends(self, tmp_path):
+        """A second opening appends — earlier content survives."""
+        with open_errors_log(tmp_path) as log:
+            log.write(b"first\n")
+        with open_errors_log(tmp_path) as log:
+            log.write(b"second\n")
+        assert (tmp_path / ERRORS_LOG_FILENAME).read_bytes() == b"first\nsecond\n"
+
+    def test_crash_header(self, capsys):
+        """The header goes to stderr and carries a timestamp and the process name."""
+        print_crash_header("timer")
+        assert re.fullmatch(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] timer crashed:\n", capsys.readouterr().err)
 
 
 class TestPidLock:

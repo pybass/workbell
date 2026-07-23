@@ -2,12 +2,14 @@
 
 import fcntl
 import os
+import sys
 import time
 from pathlib import Path
-from typing import TextIO
+from typing import BinaryIO, TextIO
 
 TRAY_LOCK_FILENAME = "tray.lock"  # tray single-instance lock, kept next to the DB; named here so clients agree on it
 TIMER_LOCK_FILENAME = "timer.lock"  # timer liveness lock, next to the DB; flock'ed by the timer process for its whole life
+ERRORS_LOG_FILENAME = "errors.log"  # shared crash log next to the DB; detached processes (timer, tray) append to it
 
 
 def unix_now() -> int:
@@ -20,6 +22,20 @@ def format_hms(sec: int) -> str:
     h, rem = divmod(sec, 3600)
     m, s = divmod(rem, 60)
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def open_errors_log(data_dir: Path) -> BinaryIO:
+    """Open the shared errors log for appending — detached spawns attach it as their stdout/stderr.
+
+    Nothing writes to it in normal operation, so it grows only when something breaks — no
+    rotation needed; O_APPEND keeps the concurrent writers (timer, tray) safe.
+    """
+    return (data_dir / ERRORS_LOG_FILENAME).open("ab")
+
+
+def print_crash_header(process_name: str) -> None:
+    """Stamp a timestamped crash header on stderr; the caller re-raises, so the traceback lands right below it in errors.log."""
+    sys.stderr.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {process_name} crashed:\n")
 
 
 def acquire_pid_lock(path: Path, *, blocking: bool = False) -> TextIO | None:

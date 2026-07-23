@@ -9,7 +9,7 @@ from cyclopts import App
 
 from workbell.cli import utils
 from workbell.core.errors import AppError
-from workbell.core.utils import TRAY_LOCK_FILENAME, lock_holder_pid
+from workbell.core.utils import TRAY_LOCK_FILENAME, lock_holder_pid, open_errors_log
 
 app = App(name="tray", help="Menu bar icon (macOS).")
 
@@ -35,13 +35,16 @@ def run(*, foreground: bool = False, core: utils.InjectedCore) -> None:
     if foreground:
         rc = subprocess.run(argv, check=False).returncode  # noqa: S603
         raise SystemExit(128 - rc if rc < 0 else rc)  # negative = killed by signal; report the shell convention 128+signum
-    subprocess.Popen(  # noqa: S603
-        argv,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    # stdout/stderr go to errors.log, not DEVNULL: the detached tray has no terminal, and its
+    # crash traceback must survive somewhere the user can find.
+    with open_errors_log(core.db_path.parent) as log:
+        subprocess.Popen(  # noqa: S603
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
     utils.console.print("Tray started.")
 
 
