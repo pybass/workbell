@@ -8,7 +8,7 @@ from pathlib import Path
 from workbell.core import bell
 from workbell.core.errors import AppError
 from workbell.core.migrations import MIGRATIONS
-from workbell.core.models import Interval, IntervalStatus, Settings, TickResult
+from workbell.core.models import DailyStats, Interval, IntervalStatus, Settings, TickResult
 from workbell.core.utils import TIMER_LOCK_FILENAME, lock_holder_pid, unix_now
 
 CHECKPOINT_EVERY_SEC = 10  # a live timer refreshes checkpointed_at at least this often; also max work lost on a crash
@@ -135,13 +135,31 @@ class Core:
         return [Interval.from_row(row) for row in rows]
 
     def count_today_completed(self, now: int) -> int:
-        """Count intervals completed today — completed_at falls in the local calendar day of now."""
+        """Count completed intervals belonging to today — started_at falls in the local calendar day of now."""
         row = self._conn.execute(
             "SELECT COUNT(*) AS cnt FROM intervals WHERE status = 'completed'"
-            " AND date(completed_at, 'unixepoch', 'localtime') = date(:now, 'unixepoch', 'localtime')",
+            " AND date(started_at, 'unixepoch', 'localtime') = date(:now, 'unixepoch', 'localtime')",
             {"now": now},
         ).fetchone()
         return int(row["cnt"])
+
+    def list_daily_stats(self, limit: int) -> list[DailyStats]:
+        """Per-day totals of completed intervals for the most recent `limit` recorded days, newest day first.
+
+        An interval belongs to the local calendar day it was started (the count_today_completed
+        convention). A day is recorded when any interval was started in it — one holding only the
+        active interval yields a zero row; days without starts do not count toward the limit.
+        """
+        if limit <= 0:
+            raise AppError("Limit must be positive.")
+        rows = self._conn.execute(
+            "SELECT date(started_at, 'unixepoch', 'localtime') AS day,"
+            " COUNT(*) FILTER (WHERE status = 'completed') AS completed,"
+            " COALESCE(SUM(worked_sec) FILTER (WHERE status = 'completed'), 0) AS worked_sec"
+            " FROM intervals GROUP BY day ORDER BY day DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [DailyStats(**dict(row)) for row in rows]
 
     def delete_interval(self, interval_id: int) -> None:
         """Delete an interval by id, whatever its status; AppError when it does not exist.

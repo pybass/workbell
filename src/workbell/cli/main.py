@@ -7,7 +7,7 @@ from typing import Annotated
 
 from cyclopts import App, Parameter
 
-from workbell.cli.commands import cancel, config, delete, history, pause, raycast, resume, start, status, tray
+from workbell.cli.commands import cancel, config, delete, history, pause, raycast, resume, start, stats, status, tray
 from workbell.core.core import Core
 from workbell.core.errors import AppError
 
@@ -20,13 +20,14 @@ app.command(resume.run, name="resume", sort_key=3)
 app.command(cancel.run, name="cancel", sort_key=4)
 app.command(status.run, name="status", sort_key=5)
 app.command(history.run, name="history", sort_key=6)
-app.command(delete.run, name="delete", sort_key=7)
+app.command(stats.run, name="stats", sort_key=7)
+app.command(delete.run, name="delete", sort_key=8)
 app.command(config.app)
 app.command(tray.app)
 app.command(raycast.app)
-config.app.sort_key = 8  # sub-apps cannot take sort_key at registration time
-tray.app.sort_key = 9
-raycast.app.sort_key = 10
+config.app.sort_key = 9  # sub-apps cannot take sort_key at registration time
+tray.app.sort_key = 10
+raycast.app.sort_key = 11
 app["--help"].show = False  # both flags keep working; they are just noise in the command list
 app["--version"].show = False
 

@@ -18,6 +18,7 @@ workbell resume                      # resume the paused interval
 workbell cancel                      # delete the active interval (asks to confirm; --yes skips)
 workbell status                      # show the active interval
 workbell history [limit]             # list recent intervals (default: 20)
+workbell stats [limit]               # per-day totals for recent days (default: 20)
 workbell delete <id>                 # delete an interval, whatever its status
 workbell config                      # show settings
 workbell config default-duration 30  # set the default interval length (initially 25 minutes)

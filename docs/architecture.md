@@ -113,8 +113,10 @@ at zero). It never ticks a countdown — deliberate, see
 [non-goals](non-goals.md); time details live inside the menu, visible only
 when opened: `Left: 20:02 — rings at 14:15` (the ring time only while
 running — paused has no bell scheduled), `Worked: 24:58 of 45:00`, and
-`Today: 3 completed` (kept visible when idle too). It obeys the same rule
-as everything else — the DB is the single source of truth, no IPC: an
+`Today: 3 completed` (kept visible when idle too; an interval counts
+toward the day it was started — the convention shared with `stats`).
+It obeys the same rule as everything else — the DB is the single
+source of truth, no IPC: an
 AppKit timer polls `Core.get_active_interval` once a second and redraws,
 and menu clicks call `Core` in-process on the main thread, so the whole
 client is single-threaded. A click that loses a race to another client is

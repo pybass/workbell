@@ -17,7 +17,7 @@ from workbell.core import bell
 from workbell.core.core import CHECKPOINT_EVERY_SEC, TIMER_STALE_SEC, Core
 from workbell.core.errors import AppError
 from workbell.core.migrations import MIGRATIONS
-from workbell.core.models import IntervalStatus, Settings, TickResult
+from workbell.core.models import DailyStats, IntervalStatus, Settings, TickResult
 from workbell.core.utils import TIMER_LOCK_FILENAME, acquire_pid_lock
 
 DURATION = 1500  # planned length used where the value itself does not matter (an ordinary 25-minute interval)
@@ -26,6 +26,9 @@ STALE_BACKDATE_SEC = TIMER_STALE_SEC + 60  # backdate that makes the timer look 
 NOW = 1_700_000_000  # synthetic 'now' for count_today_completed, which takes now explicitly — no real clock involved
 # Local midnight opening NOW's calendar day, per the same OS timezone rules SQLite's 'localtime' modifier consults.
 MIDNIGHT = int(datetime.fromtimestamp(NOW, tz=UTC).astimezone().replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+# Local midday of NOW's day: backdating anchor for daily-stats tests — NOON - n*86_400 stays inside
+# the calendar day n days back even when a DST shift drifts the wall clock by an hour.
+NOON = MIDNIGHT + 12 * 3600
 
 
 @pytest.fixture
@@ -60,6 +63,11 @@ def backdate_checkpointed_at(db: sqlite3.Connection, seconds: int) -> None:
     """Shift the last checkpoint into the past — simulated elapsed time, no real waiting."""
     db.execute("UPDATE intervals SET checkpointed_at = checkpointed_at - ?", (seconds,))
     db.commit()
+
+
+def local_day(ts: int) -> str:
+    """Local calendar date of a unix timestamp, ISO 'YYYY-MM-DD' — the rendering SQLite's 'localtime' produces."""
+    return datetime.fromtimestamp(ts, tz=UTC).astimezone().date().isoformat()
 
 
 class TestMigrations:
@@ -477,36 +485,91 @@ class TestCancel:
 
 
 class TestCountTodayCompleted:
-    """Counting intervals completed in the local calendar day of a given now."""
+    """Counting completed intervals started in the local calendar day of a given now."""
 
     def test_empty(self, core):
         """No intervals — zero completed today."""
         assert core.count_today_completed(NOW) == 0
 
     @pytest.mark.parametrize(
-        ("completed_at", "expected"),
+        ("started_at", "expected"),
         [(NOW, 1), (MIDNIGHT, 1), (MIDNIGHT - 1, 0), (NOW + 86_400, 0)],
         ids=["now", "midnight", "before-midnight", "next-day"],
     )
-    def test_local_day_boundary(self, core, db, completed_at, expected):
+    def test_local_day_boundary(self, core, db, started_at, expected):
         """Day equality in local time, not a 24-hour window: midnight is the inclusive edge."""
         interval = core.start_interval(DURATION)
         assert core._complete_interval(interval.id)
-        db.execute("UPDATE intervals SET completed_at = ?", (completed_at,))
+        db.execute("UPDATE intervals SET started_at = ?", (started_at,))
         db.commit()
         assert core.count_today_completed(NOW) == expected
 
     def test_counts_each_completion(self, core, db):
-        """Every interval completed today counts once; other days' completions do not."""
+        """Every completed interval started today counts once; other days' starts do not."""
         ids = []
         for _ in range(3):
             interval = core.start_interval(DURATION)
             assert core._complete_interval(interval.id)
             ids.append(interval.id)
-        db.execute("UPDATE intervals SET completed_at = ?", (NOW,))
-        db.execute("UPDATE intervals SET completed_at = ? WHERE id = ?", (MIDNIGHT - 1, ids[0]))
+        db.execute("UPDATE intervals SET started_at = ?", (NOW,))
+        db.execute("UPDATE intervals SET started_at = ? WHERE id = ?", (MIDNIGHT - 1, ids[0]))
         db.commit()
         assert core.count_today_completed(NOW) == 2
+
+
+class TestListDailyStats:
+    """Per-day totals for stats: grouping by local start day, zero rows for the active interval, the limit."""
+
+    def test_empty(self, core):
+        """No intervals — no rows."""
+        assert core.list_daily_stats(5) == []
+
+    @pytest.mark.parametrize("limit", [0, -5])
+    def test_rejects_nonpositive_limit(self, core, limit):
+        """Zero and negative limits are refused."""
+        with pytest.raises(AppError, match="positive"):
+            core.list_daily_stats(limit)
+
+    def test_groups_by_start_day(self, core, db):
+        """Completions started the same local day merge into one row (worked summed); days come newest first."""
+        ids = []
+        for duration in (600, 900, 1200):
+            interval = core.start_interval(duration)
+            assert core._complete_interval(interval.id)
+            ids.append(interval.id)
+        db.execute("UPDATE intervals SET started_at = ?", (NOON,))
+        db.execute("UPDATE intervals SET started_at = ? WHERE id = ?", (NOON - 2 * 86_400, ids[2]))
+        db.commit()
+        assert core.list_daily_stats(10) == [
+            DailyStats(day=local_day(NOON), completed=2, worked_sec=1500),
+            DailyStats(day=local_day(NOON - 2 * 86_400), completed=1, worked_sec=1200),
+        ]
+
+    def test_active_interval_yields_zero_row(self, core, db):
+        """A day holding only the active interval appears with zero totals; its worked_sec does not leak in."""
+        interval = core.start_interval(DURATION)
+        assert core._complete_interval(interval.id)
+        core.start_interval(DURATION)
+        core.pause_interval()
+        db.execute("UPDATE intervals SET started_at = ? WHERE status = 'completed'", (NOON - 86_400,))
+        db.execute("UPDATE intervals SET started_at = ?, worked_sec = 600 WHERE status = 'paused'", (NOON,))
+        db.commit()
+        assert core.list_daily_stats(10) == [
+            DailyStats(day=local_day(NOON), completed=0, worked_sec=0),
+            DailyStats(day=local_day(NOON - 86_400), completed=1, worked_sec=DURATION),
+        ]
+
+    def test_limit_keeps_newest_days(self, core, db):
+        """The limit counts recorded days and drops the oldest ones."""
+        ids = []
+        for _ in range(3):
+            interval = core.start_interval(DURATION)
+            assert core._complete_interval(interval.id)
+            ids.append(interval.id)
+        for days_ago, interval_id in enumerate(ids):
+            db.execute("UPDATE intervals SET started_at = ? WHERE id = ?", (NOON - days_ago * 86_400, interval_id))
+        db.commit()
+        assert [stats.day for stats in core.list_daily_stats(2)] == [local_day(NOON), local_day(NOON - 86_400)]
 
 
 class TestSettings:

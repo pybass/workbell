@@ -49,6 +49,15 @@ class Interval:
 
 
 @dataclass(frozen=True, slots=True)
+class DailyStats:
+    """Aggregate of one local calendar day's completed intervals; a day owns the intervals started in it."""
+
+    day: str  # local calendar date, ISO 'YYYY-MM-DD'
+    completed: int  # completed intervals started that day; 0 when the day only holds the active interval
+    worked_sec: int  # their summed worked time (0 when none completed)
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     """User settings, stored as the single row of the settings table."""
 
