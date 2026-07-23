@@ -17,7 +17,7 @@ from workbell.core import bell
 from workbell.core.core import CHECKPOINT_EVERY_SEC, TIMER_STALE_SEC, Core
 from workbell.core.errors import AppError
 from workbell.core.migrations import MIGRATIONS
-from workbell.core.models import DailyStats, IntervalStatus, Settings, TickResult
+from workbell.core.models import DailyStats, IntervalStatus, NotificationStyle, Settings, TickResult
 from workbell.core.utils import TIMER_LOCK_FILENAME, acquire_pid_lock
 
 DURATION = 1500  # planned length used where the value itself does not matter (an ordinary 25-minute interval)
@@ -576,8 +576,10 @@ class TestSettings:
     """The single settings row: seeded defaults, updates, validation."""
 
     def test_seeded_defaults(self, core):
-        """A fresh database is seeded with 25 minutes and the bell's fallback sound."""
-        assert core.get_settings() == Settings(default_duration_sec=1500, bell_sound=bell.DEFAULT_SOUND)
+        """A fresh database is seeded with 25 minutes, the bell's fallback sound, and the banner style."""
+        assert core.get_settings() == Settings(
+            default_duration_sec=1500, bell_sound=bell.DEFAULT_SOUND, notification_style=NotificationStyle.BANNER
+        )
 
     def test_set_default_duration(self, core):
         """The new default duration is returned and persisted."""
@@ -600,3 +602,13 @@ class TestSettings:
         """A name outside the installed system sounds is refused."""
         with pytest.raises(AppError, match="Unknown sound"):
             core.set_bell_sound("NoSuchSound")
+
+    def test_set_notification_style_case_insensitive(self, core):
+        """The style matches case-insensitively and is stored canonically."""
+        assert core.set_notification_style("DIALOG").notification_style is NotificationStyle.DIALOG
+        assert core.get_settings().notification_style is NotificationStyle.DIALOG
+
+    def test_set_notification_style_unknown(self, core):
+        """A style outside the known ones is refused, naming the choices."""
+        with pytest.raises(AppError, match=r"Unknown style.*banner, dialog"):
+            core.set_notification_style("popup")

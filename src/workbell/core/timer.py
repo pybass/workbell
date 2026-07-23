@@ -38,7 +38,8 @@ def main() -> None:
         while True:
             result = core.timer_tick(interval_id)
             if result is TickResult.COMPLETED:
-                bell.ring(core.get_settings().bell_sound)  # the sound setting is read at ring time, not at spawn
+                settings = core.get_settings()  # settings are read at ring time, not at spawn
+                bell.ring(settings.bell_sound, settings.notification_style)
             if result is not TickResult.CONTINUE:
                 return
             time.sleep(POLL_SEC)

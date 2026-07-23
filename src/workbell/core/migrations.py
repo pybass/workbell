@@ -51,4 +51,14 @@ CREATE TABLE settings (
 INSERT INTO settings (id, default_duration_sec, bell_sound) VALUES (1, 1500, 'Glass'); -- 25 minutes
 """
 
-MIGRATIONS = (_MIGRATION_V1,)  # append-only; index+1 = PRAGMA user_version
+# Schema v2: notification style — how the bell shows the completion notification.
+# 'banner' is the Notification Center banner (fire-and-forget, the original behavior),
+# 'dialog' is a modal dialog that stays on screen until dismissed. Existing databases
+# keep their behavior via the DEFAULT; a fresh database gets it the same way, so the
+# v1 seed INSERT stays untouched.
+_MIGRATION_V2 = """
+ALTER TABLE settings ADD COLUMN notification_style TEXT NOT NULL DEFAULT 'banner'
+    CHECK (notification_style IN ('banner', 'dialog'));
+"""
+
+MIGRATIONS = (_MIGRATION_V1, _MIGRATION_V2)  # append-only; index+1 = PRAGMA user_version

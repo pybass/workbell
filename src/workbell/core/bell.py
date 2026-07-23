@@ -7,6 +7,8 @@ no client is open — the timer process calls ring() on completion.
 import subprocess
 from pathlib import Path
 
+from workbell.core.models import NotificationStyle
+
 SYSTEM_SOUNDS_DIR = Path("/System/Library/Sounds")  # the installed macOS system sounds — the only valid bell choices
 DEFAULT_SOUND = "Glass"  # matches the value seeded by the settings migration; also the ring-time fallback
 
@@ -34,15 +36,35 @@ def play_sound(name: str) -> None:
     subprocess.run(["/usr/bin/afplay", str(path)], check=False)  # noqa: S603
 
 
-def ring(sound: str) -> None:
-    """Alert the user that the interval completed: post a macOS notification, then play the bell sound.
+def ring(sound: str, style: NotificationStyle) -> None:
+    """Alert the user that the interval completed: notify per the chosen style, then play the bell sound.
 
     The sound goes through afplay and the main output volume, not the notification's
     `sound name`: notification sounds use the separate alert-volume channel and Notification
     Center delivery rules (Focus, per-app settings), any of which can silence them — and the
     bell must ring unconditionally.
+
+    The DIALOG style is spawned without waiting: the timer holds timer.lock for its whole
+    life and a successor timer blocks acquiring that lock, so ring() must not stay alive
+    until the user clicks OK. Its output goes to DEVNULL — dismissing with Escape makes
+    osascript exit with a "User canceled" error, which is not worth a line in errors.log.
     """
-    script = 'display notification "Work interval completed." with title "workbell"'
-    # S603 suppressed: absolute path, fully static argv, no shell — nothing user-controlled.
-    subprocess.run(["/usr/bin/osascript", "-e", script], check=False)  # noqa: S603
+    if style is NotificationStyle.DIALOG:
+        script = (
+            'tell application "System Events"\n'
+            "activate\n"  # bring the dialog frontmost and focused, so Return dismisses it
+            'display dialog "Work interval completed." with title "workbell" buttons {"OK"} default button "OK"\n'
+            "end tell"
+        )
+        # S603 suppressed: absolute path, fully static argv, no shell — nothing user-controlled.
+        subprocess.Popen(  # noqa: S603
+            ["/usr/bin/osascript", "-e", script],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        script = 'display notification "Work interval completed." with title "workbell"'
+        # S603 suppressed: absolute path, fully static argv, no shell — nothing user-controlled.
+        subprocess.run(["/usr/bin/osascript", "-e", script], check=False)  # noqa: S603
     play_sound(sound)

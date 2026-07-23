@@ -57,16 +57,25 @@ class DailyStats:
     worked_sec: int  # their summed worked time (0 when none completed)
 
 
+class NotificationStyle(StrEnum):
+    """How the bell shows the completion notification; values match the TEXT stored in SQLite."""
+
+    BANNER = "banner"  # Notification Center banner — fire-and-forget, easy to miss
+    DIALOG = "dialog"  # modal dialog that stays on screen until dismissed
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     """User settings, stored as the single row of the settings table."""
 
     default_duration_sec: int  # default interval length when start is given no duration
     bell_sound: str  # macOS system-sound name the bell plays on completion (e.g. 'Glass')
+    notification_style: NotificationStyle  # how the bell shows the completion notification
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> Self:
-        """Build Settings from the settings row, dropping the fixed single-row id."""
+        """Build Settings from the settings row, dropping the fixed single-row id and coercing the style enum."""
         data: dict[str, Any] = dict(row)
         del data["id"]
+        data["notification_style"] = NotificationStyle(data["notification_style"])
         return cls(**data)

@@ -12,20 +12,21 @@ Docs: [architecture](docs/architecture.md) Â· [data model](docs/data-model.md) Â
 ## Usage
 
 ```
-workbell start [duration]            # start a work interval (default: from config)
-workbell pause                       # pause the active interval
-workbell resume                      # resume the paused interval
-workbell cancel                      # delete the active interval (asks to confirm; --yes skips)
-workbell status                      # show the active interval
-workbell history [limit]             # list recent intervals (default: 20)
-workbell stats [limit]               # per-day totals for recent days (default: 20)
-workbell delete <id>                 # delete an interval, whatever its status
-workbell config                      # show settings
-workbell config default-duration 30  # set the default interval length (initially 25 minutes)
-workbell config bell-sound Ping      # set the bell sound (no argument: list the choices)
-workbell tray                        # open the menu bar icon (macOS)
-workbell tray stop                   # close the menu bar icon
-workbell raycast install             # generate the Raycast script commands (see docs/raycast.md)
+workbell start [duration]                  # start a work interval (default: from config)
+workbell pause                             # pause the active interval
+workbell resume                            # resume the paused interval
+workbell cancel                            # delete the active interval (asks to confirm; --yes skips)
+workbell status                            # show the active interval
+workbell history [limit]                   # list recent intervals (default: 20)
+workbell stats [limit]                     # per-day totals for recent days (default: 20)
+workbell delete <id>                       # delete an interval, whatever its status
+workbell config                            # show settings
+workbell config default-duration 30        # set the default interval length (initially 25 minutes)
+workbell config bell-sound Ping            # set the bell sound (no argument: list the choices)
+workbell config notification-style dialog  # set the notification style: banner (default) or dialog
+workbell tray                              # open the menu bar icon (macOS)
+workbell tray stop                         # close the menu bar icon
+workbell raycast install                   # generate the Raycast script commands (see docs/raycast.md)
 ```
 
 A bare duration is minutes (`25`); with `h`/`m`/`s` units it is exact

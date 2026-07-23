@@ -4,6 +4,7 @@ from cyclopts import App
 
 from workbell.cli import utils
 from workbell.core import bell
+from workbell.core.models import NotificationStyle
 from workbell.core.utils import format_hms
 
 app = App(name="config", help="User settings.")
@@ -15,6 +16,7 @@ def show(*, core: utils.InjectedCore) -> None:
     settings = core.get_settings()
     utils.console.print(f"default-duration: {format_hms(settings.default_duration_sec)}")
     utils.console.print(f"bell-sound: {settings.bell_sound}")
+    utils.console.print(f"notification-style: {settings.notification_style}")
 
 
 @app.command(name="default-duration")
@@ -53,3 +55,25 @@ def bell_sound(name: str | None = None, *, core: utils.InjectedCore) -> None:
     settings = core.set_bell_sound(name)
     utils.console.print(f"Bell sound set to {settings.bell_sound}.")
     bell.play_sound(settings.bell_sound)  # preview: the user hears their choice immediately
+
+
+@app.command(name="notification-style")
+def notification_style(style: str | None = None, *, core: utils.InjectedCore) -> None:
+    """Set the completion-notification style, or list the styles when none is given.
+
+    Parameters
+    ----------
+    style
+        'banner' (Notification Center banner) or 'dialog' (a modal dialog that stays
+        on screen until dismissed). Omit to list the choices.
+    core
+        Injected by the launcher.
+
+    """
+    if style is None:
+        current = core.get_settings().notification_style
+        for choice in NotificationStyle:
+            utils.console.print(f"* {choice}" if choice is current else f"  {choice}")
+        return
+    settings = core.set_notification_style(style)
+    utils.console.print(f"Notification style set to {settings.notification_style}.")

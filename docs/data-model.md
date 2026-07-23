@@ -31,7 +31,9 @@ CREATE UNIQUE INDEX idx_intervals_one_active ON intervals ((1)) WHERE status != 
 CREATE TABLE settings (
     id                   INTEGER PRIMARY KEY CHECK (id = 1),                -- exactly one row, ever
     default_duration_sec INTEGER NOT NULL CHECK (default_duration_sec > 0), -- default interval length
-    bell_sound           TEXT NOT NULL CHECK (bell_sound != '')             -- macOS system-sound name the bell plays
+    bell_sound           TEXT NOT NULL CHECK (bell_sound != ''),            -- macOS system-sound name the bell plays
+    -- how the bell shows the completion notification
+    notification_style   TEXT NOT NULL DEFAULT 'banner' CHECK (notification_style IN ('banner', 'dialog'))
 ) STRICT;
 ```
 

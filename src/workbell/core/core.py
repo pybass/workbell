@@ -8,7 +8,7 @@ from pathlib import Path
 from workbell.core import bell
 from workbell.core.errors import AppError
 from workbell.core.migrations import MIGRATIONS
-from workbell.core.models import DailyStats, Interval, IntervalStatus, Settings, TickResult
+from workbell.core.models import DailyStats, Interval, IntervalStatus, NotificationStyle, Settings, TickResult
 from workbell.core.utils import TIMER_LOCK_FILENAME, lock_holder_pid, open_errors_log, unix_now
 
 CHECKPOINT_EVERY_SEC = 10  # a live timer refreshes checkpointed_at at least this often; also max work lost on a crash
@@ -231,6 +231,15 @@ class Core:
         if canonical is None:
             raise AppError(f"Unknown sound {name!r}. Available: {', '.join(sounds)}.")
         row = self._conn.execute("UPDATE settings SET bell_sound = ? RETURNING *", (canonical,)).fetchone()
+        return Settings.from_row(row)
+
+    def set_notification_style(self, style: str) -> Settings:
+        """Set the completion-notification style, matched case-insensitively; AppError on an unknown style."""
+        try:
+            canonical = NotificationStyle(style.lower())
+        except ValueError as e:
+            raise AppError(f"Unknown style {style!r}. Available: {', '.join(NotificationStyle)}.") from e
+        row = self._conn.execute("UPDATE settings SET notification_style = ? RETURNING *", (canonical.value,)).fetchone()
         return Settings.from_row(row)
 
     # --- Timer-process plumbing ---

@@ -59,11 +59,15 @@ checkpoint stale. At startup the timer also takes an exclusive flock on
 holds it for life; that lock is the liveness signal crash recovery probes.
 
 The bell (`core/bell.py`): a macOS notification (osascript) plus a
-user-chosen system sound (afplay) — zero dependencies. The sound is a
-settings value; the valid choices are exactly the files in
-`/System/Library/Sounds`, enumerated live, so a nonexistent sound cannot be
-chosen — and if the chosen file vanishes later, ring time falls back to the
-default, because the bell must ring.
+user-chosen system sound (afplay) — zero dependencies. The notification
+style is a settings value: a Notification Center banner (default,
+fire-and-forget) or a modal dialog that stays on screen until dismissed.
+The dialog is spawned without waiting — the timer holds `timer.lock` for
+life, and a successor timer blocks acquiring it, so ring must not outlive
+the click. The sound is a settings value too; the valid choices are exactly
+the files in `/System/Library/Sounds`, enumerated live, so a nonexistent
+sound cannot be chosen — and if the chosen file vanishes later, ring time
+falls back to the default, because the bell must ring.
 
 ## Crash recovery
 
