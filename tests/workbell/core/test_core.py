@@ -448,6 +448,34 @@ class TestDelete:
         assert core.start_interval(DURATION).status is IntervalStatus.RUNNING
 
 
+class TestCancel:
+    """The guarded delete behind the cancel command: only not-yet-completed intervals."""
+
+    @pytest.mark.parametrize("state", ["running", "paused"])
+    def test_cancels_active(self, core, state):
+        """Running and paused intervals both cancel; the row is gone."""
+        interval = core.start_interval(DURATION)
+        if state == "paused":
+            core.pause_interval()
+        core.cancel_interval(interval.id)
+        assert core._get_interval(interval.id) is None
+
+    def test_refuses_completed(self, core):
+        """An interval that completed meanwhile (the confirmation window) survives untouched."""
+        interval = core.start_interval(DURATION)
+        assert core._complete_interval(interval.id)
+        with pytest.raises(AppError, match="no longer active"):
+            core.cancel_interval(interval.id)
+        after = core._get_interval(interval.id)
+        assert after is not None
+        assert after.status is IntervalStatus.COMPLETED
+
+    def test_missing(self, core):
+        """Canceling a nonexistent id is an error."""
+        with pytest.raises(AppError, match="no longer active"):
+            core.cancel_interval(999)
+
+
 class TestCountTodayCompleted:
     """Counting intervals completed in the local calendar day of a given now."""
 

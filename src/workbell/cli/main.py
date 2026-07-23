@@ -7,20 +7,28 @@ from typing import Annotated
 
 from cyclopts import App, Parameter
 
-from workbell.cli.commands import config, delete, history, pause, raycast, resume, start, status, tray
+from workbell.cli.commands import cancel, config, delete, history, pause, raycast, resume, start, status, tray
 from workbell.core.core import Core
 from workbell.core.errors import AppError
 
 app = App(name="workbell", help="Work-interval timer.")
-app.command(start.run, name="start")
-app.command(status.run, name="status")
-app.command(pause.run, name="pause")
-app.command(resume.run, name="resume")
-app.command(history.run, name="history")
-app.command(delete.run, name="delete")
+# Explicit sort_key on every command fixes the help order (cyclopts sorts alphabetically without
+# it): the interval lifecycle in the order it happens, then inspection, records, setup.
+app.command(start.run, name="start", sort_key=1)
+app.command(pause.run, name="pause", sort_key=2)
+app.command(resume.run, name="resume", sort_key=3)
+app.command(cancel.run, name="cancel", sort_key=4)
+app.command(status.run, name="status", sort_key=5)
+app.command(history.run, name="history", sort_key=6)
+app.command(delete.run, name="delete", sort_key=7)
 app.command(config.app)
-app.command(raycast.app)
 app.command(tray.app)
+app.command(raycast.app)
+config.app.sort_key = 8  # sub-apps cannot take sort_key at registration time
+tray.app.sort_key = 9
+raycast.app.sort_key = 10
+app["--help"].show = False  # both flags keep working; they are just noise in the command list
+app["--version"].show = False
 
 
 @app.meta.default

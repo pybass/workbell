@@ -153,6 +153,17 @@ class Core:
         if cur.rowcount == 0:
             raise AppError(f"Interval #{interval_id} does not exist.")
 
+    def cancel_interval(self, interval_id: int) -> None:
+        """Delete a not-yet-completed interval by id; AppError when it completed or vanished meanwhile.
+
+        The status guard protects the caller's confirmation window: if the interval completes
+        (bell and all) while the user is deciding, the completed record survives instead of
+        being deleted. Timer coordination is the same as delete_interval.
+        """
+        cur = self._conn.execute("DELETE FROM intervals WHERE id = ? AND status != 'completed'", (interval_id,))
+        if cur.rowcount == 0:
+            raise AppError("The interval is no longer active.")
+
     def _heal_dead_timer(self) -> Interval | None:
         """Pause a running interval whose timer is provably dead; return the healed interval, if any.
 

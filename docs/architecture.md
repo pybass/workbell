@@ -20,7 +20,8 @@ One SQLite row per interval ([schema](data-model.md)); `status` is `running`,
 `paused` or `completed`. `start` creates a running interval (the DB refuses a
 second active one), `pause`/`resume` toggle it, and completion is the only
 ending: it always means the full planned time was worked and the bell rang.
-A mistaken interval is deleted, not cancelled.
+A mistaken interval is deleted — `cancel` is a guarded delete of the
+active interval, not a fourth status.
 
 All time accounting sits in two columns of that row:
 

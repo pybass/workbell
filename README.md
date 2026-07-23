@@ -15,6 +15,7 @@ Docs: [architecture](docs/architecture.md) Â· [data model](docs/data-model.md) Â
 workbell start [duration]            # start a work interval (default: from config)
 workbell pause                       # pause the active interval
 workbell resume                      # resume the paused interval
+workbell cancel                      # delete the active interval (asks to confirm; --yes skips)
 workbell status                      # show the active interval
 workbell history [limit]             # list recent intervals (default: 20)
 workbell delete <id>                 # delete an interval, whatever its status
