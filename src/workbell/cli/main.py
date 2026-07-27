@@ -1,6 +1,5 @@
 """CLI client: control workbell from the shell."""
 
-import os
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -51,9 +50,7 @@ def launcher(
     if "core" not in ignored:  # --help and --version run without a database
         command(*bound.args, **bound.kwargs)
         return
-    if data_dir is None:  # default: the XDG data dir (deliberate cross-tool convention; usually ~/.local/share)
-        data_dir = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "workbell"
-    core = Core(data_dir / "workbell.db")
+    core = Core(data_dir if data_dir is not None else Core.DEFAULT_DATA_DIR)
     try:
         command(*bound.args, **bound.kwargs, core=core)
     finally:

@@ -13,7 +13,7 @@ from workbell.core.core import Core
 @pytest.fixture
 def core(tmp_path):
     """Core on a fresh temporary database; its data directory is where the default install lands."""
-    instance = Core(tmp_path / "data" / "workbell.db")
+    instance = Core(tmp_path / "data")
     yield instance
     instance.close()
 

@@ -2,7 +2,7 @@
 
 Part of core, not a client: the bell is the application's guarantee and must ring even when
 no client is open. Spawned detached by Core.start_interval as `python -m workbell.core.timer
-<db_path> <interval_id>`. Exits as soon as the interval is gone or no longer running; every
+<interval_id> [<data_dir>]`. Exits as soon as the interval is gone or no longer running; every
 write is guarded by `status = 'running'` in SQL, so racing with pause/delete/recovery is safe.
 
 For its whole life the timer holds an exclusive flock on timer.lock: the kernel keeps the
@@ -18,21 +18,21 @@ from pathlib import Path
 from workbell.core import bell
 from workbell.core.core import Core
 from workbell.core.models import TickResult
-from workbell.core.utils import TIMER_LOCK_FILENAME, acquire_pid_lock, print_crash_header
+from workbell.core.utils import acquire_pid_lock, print_crash_header
 
 POLL_SEC = 1.0  # how often the interval row is re-read
 
 
 def main() -> None:
-    """Entry point for `python -m workbell.core.timer <db_path> <interval_id>`."""
-    db_path = Path(sys.argv[1])
-    interval_id = int(sys.argv[2])
+    """Entry point for `python -m workbell.core.timer <interval_id> [<data_dir>]` (no data dir = the default one)."""
+    interval_id = int(sys.argv[1])
+    core = Core(Path(sys.argv[2]) if len(sys.argv) > 2 else Core.DEFAULT_DATA_DIR)
     # Blocking acquire: the predecessor timer of the same interval (pause→resume within a
     # second) may still be finishing its last poll; waiting out its exit is the correct move.
-    lock = acquire_pid_lock(db_path.parent / TIMER_LOCK_FILENAME, blocking=True)
+    lock = acquire_pid_lock(core.timer_lock, blocking=True)
     if lock is None:  # a real flock error, not a held lock (blocking waits those out); heal will pause the interval
+        core.close()
         return
-    core = Core(db_path)
     try:
         # Poll the interval until it completes or stops being ours to supervise.
         while True:

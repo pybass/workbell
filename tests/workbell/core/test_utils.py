@@ -1,4 +1,4 @@
-"""Tests for the shared core helpers: duration formatting, the errors log, and the PID-stamped flock."""
+"""Tests for the shared core helpers: duration formatting, the crash header, and the PID-stamped flock."""
 
 import fcntl
 import os
@@ -6,14 +6,7 @@ import re
 
 import pytest
 
-from workbell.core.utils import (
-    ERRORS_LOG_FILENAME,
-    acquire_pid_lock,
-    format_hms,
-    lock_holder_pid,
-    open_errors_log,
-    print_crash_header,
-)
+from workbell.core.utils import acquire_pid_lock, format_hms, lock_holder_pid, print_crash_header
 
 
 class TestFormatHms:
@@ -38,16 +31,8 @@ class TestFormatHms:
         assert format_hms(sec) == expected
 
 
-class TestErrorsLog:
-    """The shared errors log: append-only opening and the crash header."""
-
-    def test_open_appends(self, tmp_path):
-        """A second opening appends — earlier content survives."""
-        with open_errors_log(tmp_path) as log:
-            log.write(b"first\n")
-        with open_errors_log(tmp_path) as log:
-            log.write(b"second\n")
-        assert (tmp_path / ERRORS_LOG_FILENAME).read_bytes() == b"first\nsecond\n"
+class TestCrashHeader:
+    """The header a detached process stamps on stderr before its traceback."""
 
     def test_crash_header(self, capsys):
         """The header goes to stderr and carries a timestamp and the process name."""

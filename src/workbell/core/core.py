@@ -9,7 +9,7 @@ from workbell.core import bell
 from workbell.core.errors import AppError
 from workbell.core.migrations import MIGRATIONS
 from workbell.core.models import DailyStats, Interval, IntervalStatus, NotificationStyle, Settings, TickResult
-from workbell.core.utils import TIMER_LOCK_FILENAME, lock_holder_pid, open_errors_log, unix_now
+from workbell.core.utils import lock_holder_pid, unix_now
 
 CHECKPOINT_EVERY_SEC = 10  # a live timer refreshes checkpointed_at at least this often; also max work lost on a crash
 # The dead-timer heal fires only when checkpointed_at is this stale AND timer.lock is free; the
@@ -21,16 +21,29 @@ class Core:
     """The application without interactive UI: owns the SQLite connection and every operation on it.
 
     Clients (CLI, TUI, tray) and the timer process call these methods; clients show AppError
-    messages to the user.
+    messages to the user. Core also owns the data directory: what lives in it and how it reaches
+    the processes Core spawns are its business, not a caller's.
     """
 
-    def __init__(self, db_path: Path) -> None:
-        """Open the database (creating the file and its directory if needed) and migrate it."""
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.db_path = db_path  # kept for spawning the timer process, which opens its own connection
+    # Where the data lives without --data-dir. A fixed path, never read from the environment
+    # (docs/non-goals.md): a variable exported for some other tool must not move the database.
+    # A class attribute because every entry point needs it before a Core exists.
+    DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "workbell"
+
+    def __init__(self, data_dir: Path) -> None:
+        """Open the database (creating the data directory and the file if needed) and migrate it."""
+        data_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir = data_dir  # holds the database, the lock files and errors.log; passed on to spawned processes
+        self.timer_lock = data_dir / "timer.lock"  # flock'ed by the timer process for its whole life: its liveness signal
+        self.tray_lock = data_dir / "tray.lock"  # tray single-instance lock, holding the icon's PID for `tray stop`
+        # Crash log of the detached processes (timer, tray), opened "ab" by every writer: nothing
+        # writes to it in normal operation, so it grows only when something breaks — no rotation
+        # needed, and O_APPEND keeps the concurrent writers safe.
+        self.errors_log = data_dir / "errors.log"
+        self._db_path = data_dir / "workbell.db"  # the file name is Core's business, never a caller's
         # autocommit: every business mutation is a single guarded statement, so statement = transaction;
         # migrations opt into an explicit BEGIN/COMMIT inside their script.
-        self._conn = sqlite3.connect(db_path, autocommit=True)
+        self._conn = sqlite3.connect(self._db_path, autocommit=True)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
@@ -39,6 +52,15 @@ class Core:
     def close(self) -> None:
         """Close the connection."""
         self._conn.close()
+
+    @property
+    def data_dir_argv(self) -> list[str]:
+        """Return the trailing data-dir argument for a spawned timer/tray process — empty when the dir is the default one.
+
+        Omitting the default keeps the process line short in `ps` output; the child falls back to
+        DEFAULT_DATA_DIR, so both spawn sites and both entry points share this one convention.
+        """
+        return [] if self.data_dir == self.DEFAULT_DATA_DIR else [str(self.data_dir)]
 
     def _migrate(self) -> None:
         """Apply pending migrations, tracked via PRAGMA user_version."""
@@ -196,7 +218,7 @@ class Core:
         """
         # lock_holder_pid reads a holder mid-PID-write as free (a microsecond window at timer startup);
         # harmless: at startup checkpointed_at is fresh, so the staleness guard below blocks the heal anyway.
-        if lock_holder_pid(self.db_path.parent / TIMER_LOCK_FILENAME) is not None:
+        if lock_holder_pid(self.timer_lock) is not None:
             return None  # the timer is alive (running or frozen by machine sleep) — nothing to heal
         row = self._conn.execute(
             "UPDATE intervals SET status = 'paused', checkpointed_at = NULL"
@@ -286,14 +308,14 @@ class Core:
 
     def _spawn_timer(self, interval_id: int) -> None:
         """Launch the detached timer process that counts the interval down and rings the bell."""
-        # S603 suppressed: fixed argv built from sys.executable and our own db path/int id — no
+        # S603 suppressed: fixed argv built from sys.executable and our own data dir/int id — no
         # shell, no user-controlled strings, nothing an attacker can inject into.
         # stdout/stderr go to errors.log, not DEVNULL: the timer has no terminal, and its crash
         # traceback must survive somewhere the user can find. The parent handle closes right
         # after the spawn; the child keeps its inherited descriptor.
-        with open_errors_log(self.db_path.parent) as log:
+        with self.errors_log.open("ab") as log:
             subprocess.Popen(  # noqa: S603
-                [sys.executable, "-m", "workbell.core.timer", str(self.db_path), str(interval_id)],
+                [sys.executable, "-m", "workbell.core.timer", str(interval_id), *self.data_dir_argv],
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=log,

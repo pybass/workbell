@@ -66,11 +66,12 @@ def install(target_dir: Path | None = None, *, core: utils.InjectedCore) -> None
         Injected by the launcher.
 
     """
-    data_dir = core.db_path.parent.resolve()
+    data_dir = core.data_dir.resolve()
     dest = (target_dir if target_dir is not None else data_dir / "raycast").resolve()
     # The absolute binary path and the data dir are baked into every script: Raycast runs
-    # scripts with a minimal environment, so neither PATH nor the user's XDG_DATA_HOME can be
-    # trusted at run time. sys.argv[0] resolved covers uv tool installs and dev venvs alike.
+    # scripts with a minimal environment, so PATH cannot be trusted at run time, and the data dir
+    # this install ran against may not be the default one. sys.argv[0] resolved covers uv tool
+    # installs and dev venvs alike.
     binary = Path(sys.argv[0]).resolve()
     base_command = f"{shlex.quote(str(binary))} --data-dir {shlex.quote(str(data_dir))}"
     dest.mkdir(parents=True, exist_ok=True)

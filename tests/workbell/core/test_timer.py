@@ -3,8 +3,6 @@
 import subprocess
 import sys
 
-from workbell.core.utils import ERRORS_LOG_FILENAME, open_errors_log
-
 
 class TestCrashLogging:
     """The real `python -m workbell.core.timer`, spawned the way Core._spawn_timer wires it."""
@@ -16,11 +14,12 @@ class TestCrashLogging:
         stderr redirected into errors.log plus the __main__ crash handler stamping the header.
         The bad argv makes the timer die before it touches the lock or the database.
         """
-        argv = [sys.executable, "-m", "workbell.core.timer", str(tmp_path / "workbell.db"), "not-a-number"]
-        with open_errors_log(tmp_path) as log:
+        argv = [sys.executable, "-m", "workbell.core.timer", "not-a-number", str(tmp_path)]
+        errors_log = tmp_path / "errors.log"
+        with errors_log.open("ab") as log:
             rc = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log, check=False, timeout=30).returncode
         assert rc == 1
-        content = (tmp_path / ERRORS_LOG_FILENAME).read_text()
+        content = errors_log.read_text()
         assert "] timer crashed:\n" in content
         assert "ValueError" in content
         assert content.index("timer crashed:") < content.index("ValueError")  # the header dates the traceback below it

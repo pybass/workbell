@@ -39,9 +39,11 @@ worked(now) = min(worked_sec + (now − checkpointed_at), duration_sec)
 ## The timer process
 
 `Core.start_interval` and `Core.resume_interval` spawn one detached process per running
-interval — `sys.executable -m workbell.core.timer <db_path> <interval_id>` —
-with its own DB connection. Core spawns it, not clients, so every client gets
-identical behavior; `-m` needs no PATH, no binary, no hidden CLI command. The
+interval — `sys.executable -m workbell.core.timer <interval_id> [<data_dir>]` —
+with its own DB connection. The data dir is omitted when it is the default one,
+so the common case stays readable in `ps`; the child then resolves the default
+itself. Core spawns it, not clients, so every client gets identical behavior;
+`-m` needs no PATH, no binary, no hidden CLI command. The
 whole algorithm ([timer.py](../src/workbell/core/timer.py)):
 
 ```
@@ -139,7 +141,7 @@ second. The pyobjc boilerplate is isolated in `tray/appkit.py`, a
 self-contained generic wrapper.
 
 `workbell tray` launches the icon as a detached process — the CLI runs
-`sys.executable -m workbell.tray <db_path>` (the timer-spawn pattern;
+`sys.executable -m workbell.tray [<data_dir>]` (the timer-spawn pattern;
 `--foreground` runs the same command attached), so clients stay independent:
 the CLI never imports the tray. One icon per data dir is enforced by
 `tray.lock`, an flock'ed file holding the owner's PID. The kernel drops the

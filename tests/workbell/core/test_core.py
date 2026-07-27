@@ -18,7 +18,7 @@ from workbell.core.core import CHECKPOINT_EVERY_SEC, TIMER_STALE_SEC, Core
 from workbell.core.errors import AppError
 from workbell.core.migrations import MIGRATIONS
 from workbell.core.models import DailyStats, IntervalStatus, NotificationStyle, Settings, TickResult
-from workbell.core.utils import TIMER_LOCK_FILENAME, acquire_pid_lock
+from workbell.core.utils import acquire_pid_lock
 
 DURATION = 1500  # planned length used where the value itself does not matter (an ordinary 25-minute interval)
 FRESH_BACKDATE_SEC = TIMER_STALE_SEC - 10  # backdate that credits measurable work yet stays below the dead-timer threshold
@@ -45,7 +45,7 @@ def core(tmp_path, monkeypatch, spawned):
     processes that race these tests and ring the real bell.
     """
     monkeypatch.setattr(Core, "_spawn_timer", lambda _self, interval_id: spawned.append(interval_id))
-    instance = Core(tmp_path / "workbell.db")
+    instance = Core(tmp_path)
     yield instance
     instance.close()
 
@@ -53,7 +53,7 @@ def core(tmp_path, monkeypatch, spawned):
 @pytest.fixture
 def db(core):
     """Second connection to the same database, for backdating timestamps and raw inspection."""
-    conn = sqlite3.connect(core.db_path)
+    conn = sqlite3.connect(core._db_path)
     conn.row_factory = sqlite3.Row
     yield conn
     conn.close()
@@ -75,12 +75,12 @@ class TestMigrations:
 
     def test_fresh_database(self, core, db):
         """Opening a missing file creates it and applies every migration."""
-        assert core.db_path.exists()
+        assert core._db_path.exists()
         assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
 
     def test_reopen(self, core, db):
         """A second Core on an already-migrated database finds the schema current and re-runs nothing."""
-        Core(core.db_path).close()
+        Core(core.data_dir).close()
         assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
 
 
@@ -167,7 +167,7 @@ class TestPause:
         """Pausing across a long gap with a live timer (machine sleep) credits the whole gap as work."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, STALE_BACKDATE_SEC)
-        lock = acquire_pid_lock(core.db_path.parent / TIMER_LOCK_FILENAME)
+        lock = acquire_pid_lock(core.timer_lock)
         assert lock is not None  # nothing else holds the timer lock in tests (_spawn_timer is stubbed)
         try:
             interval = core.pause_interval()
@@ -281,7 +281,7 @@ class TestGetActive:
         """A held timer.lock (live timer frozen by machine sleep) blocks the heal despite staleness."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, STALE_BACKDATE_SEC)
-        lock = acquire_pid_lock(core.db_path.parent / TIMER_LOCK_FILENAME)
+        lock = acquire_pid_lock(core.timer_lock)
         assert lock is not None  # nothing else holds the timer lock in tests (_spawn_timer is stubbed)
         try:
             active = core.get_active_interval()
