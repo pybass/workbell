@@ -5,6 +5,7 @@ no client is open — the timer process calls ring() on completion.
 """
 
 import subprocess
+import time
 from pathlib import Path
 
 from workbell.core.models import NotificationStyle
@@ -47,13 +48,18 @@ def ring(sound: str, style: NotificationStyle) -> None:
     The DIALOG style is spawned without waiting: the timer holds timer.lock for its whole
     life and a successor timer blocks acquiring that lock, so ring() must not stay alive
     until the user clicks OK. Its output goes to DEVNULL — dismissing with Escape makes
-    osascript exit with a "User canceled" error, which is not worth a line in errors.log.
+    osascript exit with a "User canceled" error, and an unanswered dialog kills osascript
+    with an Apple event timeout after ~2 minutes; neither is worth a line in errors.log.
+    The dialog itself survives that timeout (System Events owns the window) and stays up
+    until clicked, so dialogs from successive completions can stack — the completion time
+    in the message is what tells them apart.
     """
     if style is NotificationStyle.DIALOG:
         script = (
             'tell application "System Events"\n'
             "activate\n"  # bring the dialog frontmost and focused, so Return dismisses it
-            'display dialog "Work interval completed." with title "workbell" buttons {"OK"} default button "OK"\n'
+            f'display dialog "Work interval completed at {time.strftime("%H:%M")}."'
+            ' with title "workbell" buttons {"OK"} default button "OK"\n'
             "end tell"
         )
         # S603 suppressed: absolute path, fully static argv, no shell — nothing user-controlled.
