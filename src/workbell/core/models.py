@@ -1,5 +1,3 @@
-"""Domain models: work intervals and user settings."""
-
 import sqlite3
 from dataclasses import dataclass
 from enum import Enum, StrEnum
@@ -24,19 +22,16 @@ class TickResult(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Interval:
-    """A single work interval."""
-
     id: int  # stable id, never reused (AUTOINCREMENT)
-    status: IntervalStatus  # current lifecycle state
+    status: IntervalStatus
     duration_sec: int  # planned length
     worked_sec: int  # work banked so far; exact as of checkpointed_at
-    started_at: int  # unix seconds; when the interval was started
+    started_at: int  # unix seconds
     checkpointed_at: int | None  # unix seconds; the last checkpoint (start/resume stamp it too); set exactly when running
     completed_at: int | None  # unix seconds; set exactly when completed
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> Self:
-        """Build an Interval from a database row, coercing the TEXT status into the enum."""
         data: dict[str, Any] = dict(row)
         data["status"] = IntervalStatus(data["status"])
         return cls(**data)
@@ -68,13 +63,12 @@ class NotificationStyle(StrEnum):
 class Settings:
     """User settings, stored as the single row of the settings table."""
 
-    default_duration_sec: int  # default interval length when start is given no duration
-    bell_sound: str  # macOS system-sound name the bell plays on completion (e.g. 'Glass')
-    notification_style: NotificationStyle  # how the bell shows the completion notification
+    default_duration_sec: int
+    bell_sound: str  # macOS system-sound name (e.g. 'Glass')
+    notification_style: NotificationStyle
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> Self:
-        """Build Settings from the settings row, dropping the fixed single-row id and coercing the style enum."""
         data: dict[str, Any] = dict(row)
         del data["id"]
         data["notification_style"] = NotificationStyle(data["notification_style"])

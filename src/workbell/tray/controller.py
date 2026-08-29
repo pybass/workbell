@@ -1,5 +1,3 @@
-"""Tray controller: the menu model, a 1 s DB poll, and direct in-process Core calls."""
-
 import contextlib
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -11,8 +9,8 @@ from workbell.core.utils import format_hms, unix_now
 from workbell.tray.appkit import MenuItem, MenuSeparator, TrayApp
 
 POLL_SEC = 1.0  # keeps the menu info fresh and heals a dead timer within ~1 s; the title itself rarely changes
-IDLE_ICON = "◇"  # idle glyph; prefixed with today's completed count when non-zero
-STATUS_ICON = {IntervalStatus.RUNNING: "▶", IntervalStatus.PAUSED: "⏸"}  # title icon per active status
+IDLE_ICON = "◇"  # prefixed with today's completed count when non-zero
+STATUS_ICON = {IntervalStatus.RUNNING: "▶", IntervalStatus.PAUSED: "⏸"}
 
 
 class TrayController:
@@ -20,20 +18,18 @@ class TrayController:
 
     def __init__(self, core: Core) -> None:
         """Build the static menu; the first poll tick sets real titles and visibility."""
-        self._core = core  # shared application core; every call runs in-process on the main thread
-        self._app = TrayApp(title=IDLE_ICON)  # AppKit status item + event loop
-        # Menu items: action visibility tracks the active interval's status on every refresh.
-        # The start title shows the configured default duration; the first refresh fills it in,
-        # and the click re-reads settings so a config change applies without restarting the tray.
+        self._core = core  # every call runs in-process on the main thread
+        self._app = TrayApp(title=IDLE_ICON)
+        # Action items: visibility tracks the active interval's status on every refresh. Start re-reads
+        # the default duration on click, so a config change applies without restarting the tray.
         self._start_item = MenuItem(
             "Start",
             callback=lambda _: self._invoke(lambda: self._core.start_interval(self._core.get_settings().default_duration_sec)),
         )
         self._pause_item = MenuItem("Pause", callback=lambda _: self._invoke(self._core.pause_interval), hidden=True)
         self._resume_item = MenuItem("Resume", callback=lambda _: self._invoke(self._core.resume_interval), hidden=True)
-        # Info lines (grey, non-clickable). Left comes first — it is the number the menu is opened
-        # for — and while running it also names the bell's wall-clock moment. Today stays visible
-        # even when idle, so the menu never changes shape between states more than it must.
+        # Info lines (grey, non-clickable). Left comes first — it is the number the menu is opened for.
+        # Today stays visible even when idle, so the menu changes shape between states as little as possible.
         self._left_item = MenuItem("Left: -", enabled=False, hidden=True)  # e.g. "Left: 20:02 — rings at 14:15"
         self._worked_item = MenuItem("Worked: -", enabled=False, hidden=True)  # e.g. "Worked: 24:58 of 45:00"
         self._today_item = MenuItem("Today: -", enabled=False)  # e.g. "Today: 3 completed"
@@ -57,7 +53,6 @@ class TrayController:
         self._app.run()
 
     def _refresh(self) -> None:
-        """Poll the DB and sync the title and menu to the active interval."""
         # get_active_interval also heals a dead timer, so an open tray doubles as a ~1 s recovery watchdog.
         interval = self._core.get_active_interval()
         now = unix_now()

@@ -1,5 +1,3 @@
-"""Tests for the Raycast script-command generation: rendering and the install command."""
-
 import shlex
 import sys
 from pathlib import Path
@@ -19,10 +17,7 @@ def core(tmp_path):
 
 
 class TestRender:
-    """Rendering one script command."""
-
     def test_golden(self):
-        """The rendered script is exactly the @raycast metadata header plus one exec line."""
         script = raycast._Script(
             "start.sh", "Start Work Interval", "Start a work interval with the default duration", "🔔", "silent", "start"
         )
@@ -41,8 +36,6 @@ class TestRender:
 
 
 class TestInstall:
-    """Writing the canonical script set into a directory."""
-
     def test_default_target_and_set(self, core, tmp_path):
         """Without a target the scripts land in raycast/ inside the data directory, one per command."""
         raycast.install(core=core)

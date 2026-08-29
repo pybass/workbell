@@ -1,5 +1,3 @@
-"""The pause command: suspend the active interval."""
-
 from workbell.cli import utils
 from workbell.core.utils import format_hms
 

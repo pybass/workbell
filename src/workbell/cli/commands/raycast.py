@@ -1,5 +1,3 @@
-"""The raycast command group: generate Raycast script commands that drive the CLI."""
-
 import shlex
 import sys
 from dataclasses import dataclass
@@ -16,9 +14,9 @@ app = App(name="raycast", help="Raycast integration.")
 class _Script:
     """One Raycast script command: the metadata Raycast reads plus the CLI call it runs."""
 
-    filename: str  # file name inside the target directory
-    title: str  # command title shown in Raycast's search bar
-    description: str  # one-line description shown in Raycast
+    filename: str
+    title: str
+    description: str
     icon: str  # emoji shown next to the title
     mode: str  # Raycast output mode: 'silent' (brief HUD) or 'compact' (single result line)
     command: str  # workbell subcommand appended to the baked base command

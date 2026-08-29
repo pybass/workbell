@@ -1,5 +1,3 @@
-"""The history command: list recent intervals."""
-
 from rich.table import Table
 
 from workbell.cli import utils

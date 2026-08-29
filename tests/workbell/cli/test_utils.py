@@ -1,5 +1,3 @@
-"""Tests for the CLI helpers: duration parsing and timestamp formatting."""
-
 import contextlib
 import os
 import time

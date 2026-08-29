@@ -1,8 +1,4 @@
-"""The bell: macOS system-sound enumeration and the completion alert (notification + sound).
-
-Part of core, not a client: the bell is the application's guarantee and must ring even when
-no client is open — the timer process calls ring() on completion.
-"""
+"""The completion bell. Part of core, not a client: it must ring with no client open, so the timer process calls ring()."""
 
 import subprocess
 import time
@@ -10,16 +6,12 @@ from pathlib import Path
 
 from workbell.core.models import NotificationStyle
 
-SYSTEM_SOUNDS_DIR = Path("/System/Library/Sounds")  # the installed macOS system sounds — the only valid bell choices
+SYSTEM_SOUNDS_DIR = Path("/System/Library/Sounds")  # the only valid bell choices
 DEFAULT_SOUND = "Glass"  # matches the value seeded by the settings migration; also the ring-time fallback
 
 
 def available_sounds() -> list[str]:
-    """Names of the installed macOS system sounds (sorted stems of the .aiff files).
-
-    Enumerated fresh on every call — no hardcoded list, so the choices can never desync
-    from what the OS actually has.
-    """
+    """Names of the installed macOS system sounds, enumerated fresh on every call so they never desync from the OS."""
     return sorted(path.stem for path in SYSTEM_SOUNDS_DIR.glob("*.aiff"))
 
 

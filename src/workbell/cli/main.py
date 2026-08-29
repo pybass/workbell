@@ -1,5 +1,3 @@
-"""CLI client: control workbell from the shell."""
-
 import sys
 from pathlib import Path
 from typing import Annotated

@@ -1,4 +1,4 @@
-"""Foreground tray entry point: `python -m workbell.tray [<data_dir>]`, spawned detached by the CLI."""
+"""The tray process: `python -m workbell.tray [<data_dir>]`, spawned by `workbell tray` (detached unless --foreground)."""
 
 import sys
 from pathlib import Path
@@ -9,11 +9,9 @@ from workbell.tray.controller import TrayController
 
 
 def main() -> None:
-    """Open the Core, take the single-instance lock, and run the tray until quit; a second instance exits with one line."""
     core = Core(Path(sys.argv[1]) if len(sys.argv) > 1 else Core.DEFAULT_DATA_DIR)
     try:
-        # One icon per data dir: tray.lock records our PID (the SIGTERM target for `workbell tray
-        # stop`) under an flock the kernel drops with the process, so it cannot go stale.
+        # One icon per data dir; the PID in tray.lock is the SIGTERM target of `workbell tray stop`.
         lock = acquire_pid_lock(core.tray_lock)
         if lock is None:
             sys.exit("error: Tray is already running.")

@@ -1,5 +1,3 @@
-"""Database schema migrations, applied in order by Core."""
-
 # Schema v1: the whole schema — work intervals plus the single settings row.
 #
 # intervals: one row per work interval; no audit/event log.
@@ -51,11 +49,9 @@ CREATE TABLE settings (
 INSERT INTO settings (id, default_duration_sec, bell_sound) VALUES (1, 1500, 'Glass'); -- 25 minutes
 """
 
-# Schema v2: notification style — how the bell shows the completion notification.
-# 'banner' is the Notification Center banner (fire-and-forget, the original behavior),
-# 'dialog' is a modal dialog that stays on screen until dismissed. Existing databases
-# keep their behavior via the DEFAULT; a fresh database gets it the same way, so the
-# v1 seed INSERT stays untouched.
+# Schema v2: notification style ('banner' or 'dialog', see NotificationStyle). Existing
+# databases keep their behavior via the DEFAULT; a fresh database gets it the same way, so
+# the v1 seed INSERT stays untouched.
 _MIGRATION_V2 = """
 ALTER TABLE settings ADD COLUMN notification_style TEXT NOT NULL DEFAULT 'banner'
     CHECK (notification_style IN ('banner', 'dialog'));

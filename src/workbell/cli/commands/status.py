@@ -1,5 +1,3 @@
-"""The status command: show the active interval's progress."""
-
 from datetime import UTC, datetime
 
 from workbell.cli import utils

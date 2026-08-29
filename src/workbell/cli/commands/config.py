@@ -1,5 +1,3 @@
-"""The config command group: show and change user settings."""
-
 from cyclopts import App
 
 from workbell.cli import utils

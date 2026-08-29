@@ -39,11 +39,7 @@ def spawned():
 
 @pytest.fixture
 def core(tmp_path, monkeypatch, spawned):
-    """Core on a fresh temporary database, with _spawn_timer stubbed to a recorder.
-
-    The stub is the one sanctioned test double: a real spawn would launch background
-    processes that race these tests and ring the real bell.
-    """
+    """Core on a fresh temporary database, with _spawn_timer stubbed to a recorder (why: the module docstring)."""
     monkeypatch.setattr(Core, "_spawn_timer", lambda _self, interval_id: spawned.append(interval_id))
     instance = Core(tmp_path)
     yield instance
@@ -71,8 +67,6 @@ def local_day(ts: int) -> str:
 
 
 class TestMigrations:
-    """Schema creation and versioning on open."""
-
     def test_fresh_database(self, core, db):
         """Opening a missing file creates it and applies every migration."""
         assert core._db_path.exists()
@@ -85,8 +79,6 @@ class TestMigrations:
 
 
 class TestStart:
-    """Starting a new interval."""
-
     def test_starts_running(self, core):
         """A new interval is running, with zero banked work and the initial checkpoint stamped at start."""
         interval = core.start_interval(DURATION)
@@ -97,13 +89,11 @@ class TestStart:
         assert interval.completed_at is None
 
     def test_spawns_timer(self, core, spawned):
-        """Start launches the timer for the new interval."""
         interval = core.start_interval(DURATION)
         assert spawned == [interval.id]
 
     @pytest.mark.parametrize("duration", [0, -60])
     def test_rejects_nonpositive_duration(self, core, duration):
-        """Zero and negative durations are refused."""
         with pytest.raises(AppError, match="positive"):
             core.start_interval(duration)
 
@@ -125,8 +115,6 @@ class TestStart:
 
 
 class TestPause:
-    """Pausing the running interval."""
-
     def test_credits_live_segment(self, core, db):
         """Pause banks the unbanked tail into worked_sec and clears checkpointed_at."""
         core.start_interval(DURATION)
@@ -137,14 +125,12 @@ class TestPause:
         assert interval.checkpointed_at is None
 
     def test_caps_at_duration(self, core, db):
-        """A tail longer than the plan credits at most the planned duration."""
         core.start_interval(5)
         backdate_checkpointed_at(db, FRESH_BACKDATE_SEC)
         interval = core.pause_interval()
         assert interval.worked_sec == 5
 
     def test_nothing_active(self, core):
-        """Pause with no interval at all is an error."""
         with pytest.raises(AppError, match="No active interval"):
             core.pause_interval()
 
@@ -177,10 +163,7 @@ class TestPause:
 
 
 class TestResume:
-    """Resuming the paused interval."""
-
     def test_resumes(self, core):
-        """Resume turns the paused interval back into a running one with a fresh segment."""
         core.start_interval(DURATION)
         core.pause_interval()
         interval = core.resume_interval()
@@ -188,14 +171,12 @@ class TestResume:
         assert interval.checkpointed_at is not None
 
     def test_spawns_fresh_timer(self, core, spawned):
-        """Resume spawns a new timer for the same interval."""
         interval = core.start_interval(DURATION)
         core.pause_interval()
         core.resume_interval()
         assert spawned == [interval.id, interval.id]
 
     def test_nothing_active(self, core):
-        """Resume with no interval at all is an error."""
         with pytest.raises(AppError, match="No active interval"):
             core.resume_interval()
 
@@ -218,10 +199,7 @@ class TestResume:
 
 
 class TestGetInterval:
-    """Fetching a single interval by id."""
-
     def test_by_id(self, core):
-        """An existing interval comes back field-for-field."""
         interval = core.start_interval(DURATION)
         assert core._get_interval(interval.id) == interval
 
@@ -231,10 +209,7 @@ class TestGetInterval:
 
 
 class TestGetActive:
-    """Reading the single active interval."""
-
     def test_none_when_empty(self, core):
-        """No intervals at all — no active one."""
         assert core.get_active_interval() is None
 
     @pytest.mark.parametrize("state", ["running", "paused"])
@@ -248,7 +223,6 @@ class TestGetActive:
         assert active.id == interval.id
 
     def test_none_when_completed(self, core):
-        """A completed interval is not active."""
         interval = core.start_interval(DURATION)
         core._complete_interval(interval.id)
         assert core.get_active_interval() is None
@@ -295,8 +269,6 @@ class TestGetActive:
 
 
 class TestListRecent:
-    """Listing recent intervals."""
-
     def test_newest_first(self, core):
         """Intervals come back newest first, the active one included."""
         first = core.start_interval(DURATION)
@@ -307,7 +279,6 @@ class TestListRecent:
         assert [interval.id for interval in core.list_recent_intervals(10)] == [third.id, second.id, first.id]
 
     def test_limit(self, core):
-        """The limit truncates the list."""
         for _ in range(3):
             interval = core.start_interval(DURATION)
             core._complete_interval(interval.id)
@@ -315,7 +286,6 @@ class TestListRecent:
 
     @pytest.mark.parametrize("limit", [0, -1])
     def test_rejects_nonpositive_limit(self, core, limit):
-        """Zero and negative limits are refused."""
         with pytest.raises(AppError, match="positive"):
             core.list_recent_intervals(limit)
 
@@ -363,8 +333,6 @@ class TestCheckpoint:
 
 
 class TestComplete:
-    """Completing a running interval (the timer's endgame)."""
-
     def test_completes(self, core):
         """Completion credits the full plan and stamps completed_at."""
         interval = core.start_interval(DURATION)
@@ -431,11 +399,8 @@ class TestTimerTick:
 
 
 class TestDelete:
-    """Removing intervals of any status."""
-
     @pytest.mark.parametrize("status", [IntervalStatus.RUNNING, IntervalStatus.PAUSED, IntervalStatus.COMPLETED])
     def test_deletes_any_status(self, core, status):
-        """Any row can be deleted, whatever its lifecycle state."""
         interval = core.start_interval(DURATION)
         if status is IntervalStatus.PAUSED:
             core.pause_interval()
@@ -445,12 +410,10 @@ class TestDelete:
         assert core._get_interval(interval.id) is None
 
     def test_missing(self, core):
-        """Deleting a nonexistent id is an error."""
         with pytest.raises(AppError, match="does not exist"):
             core.delete_interval(999)
 
     def test_frees_the_active_slot(self, core):
-        """Deleting the active interval allows a new start."""
         interval = core.start_interval(DURATION)
         core.delete_interval(interval.id)
         assert core.start_interval(DURATION).status is IntervalStatus.RUNNING
@@ -461,7 +424,6 @@ class TestCancel:
 
     @pytest.mark.parametrize("state", ["running", "paused"])
     def test_cancels_active(self, core, state):
-        """Running and paused intervals both cancel; the row is gone."""
         interval = core.start_interval(DURATION)
         if state == "paused":
             core.pause_interval()
@@ -479,7 +441,6 @@ class TestCancel:
         assert after.status is IntervalStatus.COMPLETED
 
     def test_missing(self, core):
-        """Canceling a nonexistent id is an error."""
         with pytest.raises(AppError, match="no longer active"):
             core.cancel_interval(999)
 
@@ -488,7 +449,6 @@ class TestCountTodayCompleted:
     """Counting completed intervals started in the local calendar day of a given now."""
 
     def test_empty(self, core):
-        """No intervals — zero completed today."""
         assert core.count_today_completed(NOW) == 0
 
     @pytest.mark.parametrize(
@@ -521,12 +481,10 @@ class TestListDailyStats:
     """Per-day totals for stats: grouping by local start day, zero rows for the active interval, the limit."""
 
     def test_empty(self, core):
-        """No intervals — no rows."""
         assert core.list_daily_stats(5) == []
 
     @pytest.mark.parametrize("limit", [0, -5])
     def test_rejects_nonpositive_limit(self, core, limit):
-        """Zero and negative limits are refused."""
         with pytest.raises(AppError, match="positive"):
             core.list_daily_stats(limit)
 
@@ -573,8 +531,6 @@ class TestListDailyStats:
 
 
 class TestSettings:
-    """The single settings row: seeded defaults, updates, validation."""
-
     def test_seeded_defaults(self, core):
         """A fresh database is seeded with 25 minutes, the bell's fallback sound, and the banner style."""
         assert core.get_settings() == Settings(
@@ -582,13 +538,11 @@ class TestSettings:
         )
 
     def test_set_default_duration(self, core):
-        """The new default duration is returned and persisted."""
         assert core.set_default_duration(2700).default_duration_sec == 2700
         assert core.get_settings().default_duration_sec == 2700
 
     @pytest.mark.parametrize("duration", [0, -60])
     def test_rejects_nonpositive_duration(self, core, duration):
-        """Zero and negative default durations are refused."""
         with pytest.raises(AppError, match="positive"):
             core.set_default_duration(duration)
 
@@ -599,7 +553,6 @@ class TestSettings:
         assert core.get_settings().bell_sound == canonical
 
     def test_set_bell_sound_unknown(self, core):
-        """A name outside the installed system sounds is refused."""
         with pytest.raises(AppError, match="Unknown sound"):
             core.set_bell_sound("NoSuchSound")
 

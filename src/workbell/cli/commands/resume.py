@@ -1,5 +1,3 @@
-"""The resume command: continue a paused interval."""
-
 from workbell.cli import utils
 from workbell.core.utils import format_hms
 

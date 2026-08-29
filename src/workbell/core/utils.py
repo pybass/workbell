@@ -28,10 +28,9 @@ def print_crash_header(process_name: str) -> None:
 def acquire_pid_lock(path: Path, *, blocking: bool = False) -> TextIO | None:
     """Take the exclusive flock on path and record our PID in it; None when another process holds it.
 
-    blocking=True waits for the current holder to exit instead of failing — the timer uses it to
-    wait out its predecessor's final poll. The lock lives exactly as long as the returned handle
-    stays open: the kernel releases it the moment the holder dies, so unlike a plain PID file it
-    can never go stale.
+    blocking=True waits for the current holder to exit instead of failing. The lock lives exactly as
+    long as the returned handle stays open: the kernel releases it the moment the holder dies, so
+    unlike a plain PID file it can never go stale.
     """
     handle = path.open("a+")  # "a+", not "w": must not truncate the holder's PID before the lock is ours
     try:

@@ -1,5 +1,3 @@
-"""The tray command group: launch and stop the menu bar icon."""
-
 import os
 import signal
 import subprocess

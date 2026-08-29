@@ -1,5 +1,3 @@
-"""The cancel command: discard the active interval."""
-
 from typing import Annotated
 
 from cyclopts import Parameter

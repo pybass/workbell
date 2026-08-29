@@ -1,5 +1,3 @@
-"""The delete command: remove an interval."""
-
 from workbell.cli import utils
 
 

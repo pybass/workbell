@@ -1,5 +1,3 @@
-"""Shared CLI helpers: the injected-Core annotation, input parsing, and output formatting."""
-
 import re
 from datetime import UTC, datetime
 from typing import Annotated
@@ -14,13 +12,11 @@ from workbell.core.models import IntervalStatus
 type InjectedCore = Annotated[Core, Parameter(parse=False)]  # a Core injected by the launcher, invisible to CLI parsing
 
 DURATION_RE = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")  # h/m/s components, each optional, in this order
-# Status → rich color, shared by the status and history commands; completed intervals keep the terminal's default color.
+# rich color per status; completed intervals keep the terminal's default color
 STATUS_STYLE = {IntervalStatus.RUNNING: "green", IntervalStatus.PAUSED: "yellow", IntervalStatus.COMPLETED: "default"}
 
-# The one console every command prints through (rich's documented module-singleton pattern).
-# highlight=False stops rich from auto-coloring numbers; soft_wrap=True stops it from
-# hard-wrapping long lines in pipes — with both off, console.print behaves exactly like
-# print() until a style is asked for explicitly.
+# The one console every command prints through. highlight=False (no auto-colored numbers) and
+# soft_wrap=True (no hard wrapping in pipes) make console.print behave like print() until a style is asked for.
 console = Console(highlight=False, soft_wrap=True)
 
 

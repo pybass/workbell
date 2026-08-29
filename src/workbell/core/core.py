@@ -1,5 +1,3 @@
-"""Application core: SQLite storage and business operations in one class."""
-
 import sqlite3
 import subprocess
 import sys
@@ -20,7 +18,7 @@ TIMER_STALE_SEC = 3 * CHECKPOINT_EVERY_SEC
 class Core:
     """The application without interactive UI: owns the SQLite connection and every operation on it.
 
-    Clients (CLI, TUI, tray) and the timer process call these methods; clients show AppError
+    Clients (CLI, tray) and the timer process call these methods; clients show AppError
     messages to the user. Core also owns the data directory: what lives in it and how it reaches
     the processes Core spawns are its business, not a caller's.
     """
@@ -40,7 +38,7 @@ class Core:
         # writes to it in normal operation, so it grows only when something breaks — no rotation
         # needed, and O_APPEND keeps the concurrent writers safe.
         self.errors_log = data_dir / "errors.log"
-        self._db_path = data_dir / "workbell.db"  # the file name is Core's business, never a caller's
+        self._db_path = data_dir / "workbell.db"
         # autocommit: every business mutation is a single guarded statement, so statement = transaction;
         # migrations opt into an explicit BEGIN/COMMIT inside their script.
         self._conn = sqlite3.connect(self._db_path, autocommit=True)
@@ -50,7 +48,6 @@ class Core:
         self._migrate()
 
     def close(self) -> None:
-        """Close the connection."""
         self._conn.close()
 
     @property
@@ -219,7 +216,7 @@ class Core:
         # lock_holder_pid reads a holder mid-PID-write as free (a microsecond window at timer startup);
         # harmless: at startup checkpointed_at is fresh, so the staleness guard below blocks the heal anyway.
         if lock_holder_pid(self.timer_lock) is not None:
-            return None  # the timer is alive (running or frozen by machine sleep) — nothing to heal
+            return None
         row = self._conn.execute(
             "UPDATE intervals SET status = 'paused', checkpointed_at = NULL"
             " WHERE status = 'running' AND checkpointed_at <= ? RETURNING *",
@@ -285,12 +282,7 @@ class Core:
         return Interval.from_row(row) if row else None
 
     def _checkpoint_interval(self, interval_id: int) -> None:
-        """Bank the time since the last checkpoint into worked_sec and stamp a fresh one; no-op unless running.
-
-        Called from tick every ~10s. Doubles as crash recovery (worked_sec is always
-        nearly current) and as the liveness signal (a running interval with a stale checkpointed_at
-        has a dead timer).
-        """
+        """Bank the time since the last checkpoint into worked_sec and stamp a fresh one; no-op unless running."""
         self._conn.execute(
             "UPDATE intervals SET worked_sec = min(worked_sec + (:now - checkpointed_at), duration_sec),"
             " checkpointed_at = :now WHERE id = :id AND status = 'running'",

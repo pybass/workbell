@@ -1,5 +1,3 @@
-"""The start command: begin a new work interval."""
-
 from workbell.cli import utils
 from workbell.core.utils import format_hms
 

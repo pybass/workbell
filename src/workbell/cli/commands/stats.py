@@ -1,5 +1,3 @@
-"""The stats command: per-day totals of completed intervals."""
-
 from rich.table import Table
 
 from workbell.cli import utils

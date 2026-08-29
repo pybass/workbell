@@ -1,5 +1,3 @@
-"""Tests for the shared core helpers: duration formatting, the crash header, and the PID-stamped flock."""
-
 import fcntl
 import os
 import re
@@ -10,8 +8,6 @@ from workbell.core.utils import acquire_pid_lock, format_hms, lock_holder_pid, p
 
 
 class TestFormatHms:
-    """Second counts as M:SS below an hour, H:MM:SS from one hour up."""
-
     @pytest.mark.parametrize(
         ("sec", "expected"),
         [
@@ -32,19 +28,13 @@ class TestFormatHms:
 
 
 class TestCrashHeader:
-    """The header a detached process stamps on stderr before its traceback."""
-
     def test_crash_header(self, capsys):
-        """The header goes to stderr and carries a timestamp and the process name."""
         print_crash_header("timer")
         assert re.fullmatch(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] timer crashed:\n", capsys.readouterr().err)
 
 
 class TestPidLock:
-    """The PID-stamped flock: acquisition, probing, and release."""
-
     def test_acquire_and_probe(self, tmp_path):
-        """A held lock reports the holder's PID; closing the handle frees it."""
         path = tmp_path / "test.lock"
         handle = acquire_pid_lock(path)
         assert handle is not None
@@ -63,7 +53,6 @@ class TestPidLock:
             handle.close()
 
     def test_missing_file_is_free(self, tmp_path):
-        """Probing a path that was never locked reports it free."""
         assert lock_holder_pid(tmp_path / "never.lock") is None
 
     def test_leftover_file_is_free(self, tmp_path):

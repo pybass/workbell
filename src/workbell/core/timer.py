@@ -1,7 +1,7 @@
 """The timer process: counts one running interval down and rings the bell when its time is up.
 
 Part of core, not a client: the bell is the application's guarantee and must ring even when
-no client is open. Spawned detached by Core.start_interval as `python -m workbell.core.timer
+no client is open. Spawned detached by Core (start and resume) as `python -m workbell.core.timer
 <interval_id> [<data_dir>]`. Exits as soon as the interval is gone or no longer running; every
 write is guarded by `status = 'running'` in SQL, so racing with pause/delete/recovery is safe.
 
@@ -24,7 +24,6 @@ POLL_SEC = 1.0  # how often the interval row is re-read
 
 
 def main() -> None:
-    """Entry point for `python -m workbell.core.timer <interval_id> [<data_dir>]` (no data dir = the default one)."""
     interval_id = int(sys.argv[1])
     core = Core(Path(sys.argv[2]) if len(sys.argv) > 2 else Core.DEFAULT_DATA_DIR)
     # Blocking acquire: the predecessor timer of the same interval (pause→resume within a
@@ -34,7 +33,6 @@ def main() -> None:
         core.close()
         return
     try:
-        # Poll the interval until it completes or stops being ours to supervise.
         while True:
             result = core.timer_tick(interval_id)
             if result is TickResult.COMPLETED:

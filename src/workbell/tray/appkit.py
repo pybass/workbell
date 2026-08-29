@@ -1,9 +1,4 @@
-"""Pythonic wrapper around pyobjc for macOS menu bar (tray) apps.
-
-Hides all ObjC method names, NSObject subclassing, and NSTimer boilerplate
-behind typed Python classes. Exports: TrayApp, MenuItem, MenuSeparator.
-Everything runs on the main thread — the wrapper has no cross-thread plumbing.
-"""
+"""Typed wrapper around pyobjc for menu bar apps. Everything runs on the main thread — no cross-thread plumbing."""
 
 from collections.abc import Callable
 from typing import Any, Self
@@ -31,15 +26,6 @@ class MenuItem:
         enabled: bool = True,
         hidden: bool = False,
     ) -> None:
-        """Create a menu item.
-
-        Args:
-            title: Display text.
-            callback: Called when the item is clicked, receives the MenuItem.
-            enabled: Whether the item is clickable.
-            hidden: Whether the item is visible.
-
-        """
         self._title = title
         self._callback = callback
         self._enabled = enabled
@@ -53,7 +39,6 @@ class MenuItem:
 
     @property
     def title(self) -> str:
-        """Display text."""
         return self._title
 
     @title.setter
@@ -64,7 +49,6 @@ class MenuItem:
 
     @property
     def hidden(self) -> bool:
-        """Whether the item is visible."""
         return self._hidden
 
     @hidden.setter
@@ -75,7 +59,6 @@ class MenuItem:
 
     @property
     def enabled(self) -> bool:
-        """Whether the item is clickable."""
         return self._enabled
 
     @enabled.setter
@@ -86,14 +69,9 @@ class MenuItem:
 
 
 class _Dispatcher(NSObject):  # type: ignore[misc]
-    """Internal NSObject that routes ObjC callbacks to Python callables.
-
-    Bridges ObjC target-action and NSTimer to plain Python callbacks.
-    Uses NSMenuItem.tag() (integer) for callback dispatch.
-    """
+    """NSObject target routing menu-item clicks (keyed by NSMenuItem tag) and NSTimer fires to Python callables."""
 
     def init(self) -> Self:
-        """Initialize callback storage."""
         self = objc.super(_Dispatcher, self).init()  # noqa: PLW0642  # reassigning self is the documented pyobjc init pattern
         self.callbacks: dict[int, tuple[Callable[[MenuItem], None], MenuItem]] = {}
         self.timer_callback: Callable[[], None] | None = None
@@ -102,7 +80,6 @@ class _Dispatcher(NSObject):  # type: ignore[misc]
     # ObjC selectors — names must follow Objective-C conventions
 
     def menuItemClicked_(self, sender: object) -> None:  # noqa: N802  — ObjC selector
-        """Dispatch menu item click to the registered Python callback."""
         ns_sender: Any = sender  # NSMenuItem — need dynamic access for .tag()
         tag: int = ns_sender.tag()
         if tag in self.callbacks:
@@ -110,28 +87,19 @@ class _Dispatcher(NSObject):  # type: ignore[misc]
             callback(menu_item)
 
     def timerFired_(self, _timer: object) -> None:  # noqa: N802  — ObjC selector
-        """NSTimer callback — invoke the stored Python timer callback."""
         if self.timer_callback is not None:
             self.timer_callback()
 
 
 class TrayApp:
-    """macOS menu bar (tray) application."""
-
     def __init__(self, title: str = "") -> None:
-        """Create the NSApplication, status bar item, and internal dispatcher.
-
-        Args:
-            title: Initial menu bar text.
-
-        """
         self._nsapp = NSApplication.sharedApplication()
         self._nsapp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
         self._status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(-1)
         self._status_item.setTitle_(title)
         self._dispatcher: _Dispatcher = _Dispatcher.alloc().init()
         self._timer: Any = None  # NSTimer
-        self._next_tag = 0  # monotonically incrementing, never reused
+        self._next_tag = 0
 
     @property
     def title(self) -> str:
@@ -144,14 +112,7 @@ class TrayApp:
         self._status_item.setTitle_(value)
 
     def set_menu(self, items: list[MenuItem | MenuSeparator]) -> None:
-        """Build an NSMenu from the given items and attach it to the status bar.
-
-        Clears all previous callback/tag mappings and creates a fresh menu.
-
-        Args:
-            items: Menu items and separators in display order.
-
-        """
+        """Replace the status bar menu with one built from items; earlier callback registrations are dropped."""
         self._dispatcher.callbacks.clear()
         self._next_tag = 0
 
@@ -179,15 +140,7 @@ class TrayApp:
         self._status_item.setMenu_(menu)
 
     def start_timer(self, interval_sec: float, callback: Callable[[], None]) -> None:
-        """Start a repeating timer on the main run loop: fires immediately, then every interval_sec.
-
-        Invalidates any previously running timer.
-
-        Args:
-            interval_sec: Interval between firings in seconds.
-            callback: Called on each timer tick (on the main thread).
-
-        """
+        """Start a repeating main-run-loop timer: fires immediately, then every interval_sec; replaces any running timer."""
         self.stop_timer()
         self._dispatcher.timer_callback = callback
         self._timer = NSTimer.alloc().initWithFireDate_interval_target_selector_userInfo_repeats_(
@@ -201,20 +154,15 @@ class TrayApp:
         NSRunLoop.currentRunLoop().addTimer_forMode_(self._timer, NSDefaultRunLoopMode)
 
     def stop_timer(self) -> None:
-        """Invalidate the current timer, if any."""
         if self._timer is not None:
             self._timer.invalidate()
             self._timer = None
 
     def quit(self) -> None:
-        """Stop the timer and terminate the application."""
         self.stop_timer()
         self._nsapp.terminate_(None)
 
     def run(self) -> None:
-        """Install signal handlers and start the NSApplication event loop.
-
-        Handles SIGTERM/SIGINT for clean shutdown.
-        """
+        """Run the event loop until quit. installMachInterrupt turns SIGINT into a clean stop; SIGTERM just kills the process."""
         AppHelper.installMachInterrupt()
         AppHelper.runEventLoop()
