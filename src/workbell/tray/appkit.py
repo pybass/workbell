@@ -6,7 +6,15 @@ from typing import Any, Self
 # pyobjc injects framework names lazily at runtime and ships no stubs; mypy's
 # missing-stub errors for these modules are silenced in pyproject.toml.
 import objc
-from AppKit import NSApplication, NSApplicationActivationPolicyAccessory, NSMenu, NSMenuItem, NSStatusBar
+from AppKit import (
+    NSAlert,
+    NSAlertSecondButtonReturn,
+    NSApplication,
+    NSApplicationActivationPolicyAccessory,
+    NSMenu,
+    NSMenuItem,
+    NSStatusBar,
+)
 from Foundation import NSDate, NSDefaultRunLoopMode, NSObject, NSRunLoop, NSTimer
 from PyObjCTools import AppHelper
 
@@ -110,6 +118,19 @@ class TrayApp:
     @title.setter
     def title(self, value: str) -> None:
         self._status_item.setTitle_(value)
+
+    def confirm(self, message: str, detail: str, *, ok_title: str, cancel_title: str) -> bool:
+        """Show a modal two-button alert and return True when ok_title was chosen; blocks the run loop until dismissed.
+
+        cancel_title is the default (Return) button, so the safe answer is the easy one.
+        """
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_(message)
+        alert.setInformativeText_(detail)
+        alert.addButtonWithTitle_(cancel_title)  # the first button added is the default
+        alert.addButtonWithTitle_(ok_title)
+        self._nsapp.activateIgnoringOtherApps_(True)  # accessory app: without this the alert opens behind other windows
+        return bool(alert.runModal() == NSAlertSecondButtonReturn)
 
     def set_menu(self, items: list[MenuItem | MenuSeparator]) -> None:
         """Replace the status bar menu with one built from items; earlier callback registrations are dropped."""

@@ -28,6 +28,9 @@ class TrayController:
         )
         self._pause_item = MenuItem("Pause", callback=lambda _: self._invoke(self._core.pause_interval), hidden=True)
         self._resume_item = MenuItem("Resume", callback=lambda _: self._invoke(self._core.resume_interval), hidden=True)
+        # Cancel sits at the bottom next to Quit, not beside Pause: a destructive item next to a routine one
+        # invites mis-clicks, and below the info lines the user sees the progress before deciding.
+        self._cancel_item = MenuItem("Cancel…", callback=lambda _: self._cancel(), hidden=True)
         # Info lines (grey, non-clickable). Left comes first — it is the number the menu is opened for.
         # Today stays visible even when idle, so the menu changes shape between states as little as possible.
         self._left_item = MenuItem("Left: -", enabled=False, hidden=True)  # e.g. "Left: 20:02 — rings at 14:15"
@@ -43,6 +46,7 @@ class TrayController:
                 self._worked_item,
                 self._today_item,
                 MenuSeparator(),
+                self._cancel_item,
                 MenuItem("Quit", callback=lambda _: self._app.quit()),
             ]
         )
@@ -69,6 +73,7 @@ class TrayController:
             self._start_item.title = f"Start ({format_hms(self._core.get_settings().default_duration_sec)})"
         self._pause_item.hidden = interval is None or interval.status is not IntervalStatus.RUNNING
         self._resume_item.hidden = interval is None or interval.status is not IntervalStatus.PAUSED
+        self._cancel_item.hidden = interval is None
         self._left_item.hidden = interval is None
         self._worked_item.hidden = interval is None
         if interval is not None:
@@ -81,6 +86,18 @@ class TrayController:
                 self._left_item.title = f"Left: {format_hms(left)}"
             self._worked_item.title = f"Worked: {format_hms(worked)} of {format_hms(interval.duration_sec)}"
         self._today_item.title = f"Today: {today_completed} completed"
+
+    def _cancel(self) -> None:
+        """Confirm, then delete the active interval; the same question and safe default as the CLI `cancel`."""
+        interval = self._core.get_active_interval()
+        if interval is None:  # the click lost a race to another client; the next refresh shows it
+            return
+        progress = f"{format_hms(interval.effective_worked(unix_now()))} of {format_hms(interval.duration_sec)} worked"
+        # The poll timer pauses while the alert is up. If the interval completes meanwhile,
+        # cancel_interval refuses to delete the completed record and _invoke drops the AppError.
+        question = f"Cancel the {interval.status} interval?"
+        if self._app.confirm(question, f"{progress}. It will be deleted.", ok_title="Cancel Interval", cancel_title="Keep"):
+            self._invoke(lambda: self._core.cancel_interval(interval.id))
 
     def _invoke(self, operation: Callable[[], object]) -> None:
         """Run a Core operation, then refresh.

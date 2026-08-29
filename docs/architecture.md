@@ -120,8 +120,11 @@ exits.
 
 ## The tray client
 
-`tray/` is the macOS menu bar client: an icon plus Start/Pause/Resume/Quit
-menu items. The icon shows exactly two things — today's interval ordinal and
+`tray/` is the macOS menu bar client: an icon plus Start/Pause/Resume/Cancel/Quit
+menu items. Cancel asks for confirmation in a native alert (default answer:
+keep), like the CLI `cancel`; it sits at the bottom next to Quit, below the
+progress lines and away from Pause, so a routine click cannot land on the
+destructive item. The icon shows exactly two things — today's interval ordinal and
 a status glyph: `4▶` means the day's 4th interval is running, `4⏸` paused;
 when idle it shows the day's completed count and a diamond (`3◇`, bare `◇`
 at zero). It never ticks a countdown — deliberate, see
