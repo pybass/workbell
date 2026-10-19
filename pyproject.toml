@@ -1,23 +1,23 @@
 [project]
 name = "workbell"
-version = "0.0.7"
+version = "0.1.0"
 description = "Work-interval timer."
 readme = "README.md"
 authors = [{ name = "pybass" }]
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Utilities",
 ]
 dependencies = [
     # == pins: nothing imports an app, upgrades are deliberate edits
-    "cyclopts==4.23.3",
+    "cyclopts==5.2.0",
     "pyobjc-core==12.2.2 ; sys_platform == 'darwin'",
     "pyobjc-framework-cocoa==12.2.2 ; sys_platform == 'darwin'",
     "rich==15.0.0",
@@ -31,27 +31,27 @@ Issues = "https://github.com/pybass/workbell/issues"
 workbell = "workbell.cli.main:main"
 
 [build-system]
-requires = ["uv_build>=0.12,<0.13"]  # pinned: build backends live outside uv.lock
+requires = ["uv_build>=0.13,<0.14"]  # pinned: build backends live outside uv.lock
 build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "ruff~=0.16.5",
-    "mypy~=2.3.1",
+    "ruff~=0.17.1",
+    "mypy~=2.4.0",
     "pytest~=9.1.1",
     "pytest-xdist~=3.8.0",
     "pip-audit~=2.10.1",
-    "pre-commit~=4.6.2",
+    "pre-commit~=4.7.0",
 ]
 
 [tool.uv]
-required-version = ">=0.12"
+required-version = ">=0.13"
 publish-url = "https://upload.pypi.org/legacy/"
 check-url = "https://pypi.org/simple/"  # lets a failed release re-run: uploaded files are skipped
 
 [tool.ruff]
 line-length = 130
-target-version = "py314"
+target-version = "py315"
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -96,7 +96,7 @@ indent-style = "space"
 docstring-code-format = true
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.15"
 strict = true
 warn_unreachable = true
 enable_error_code = ["redundant-expr", "possibly-undefined", "truthy-bool", "exhaustive-match", "unused-awaitable"]
