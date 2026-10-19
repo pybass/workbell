@@ -2,7 +2,8 @@
 
 Part of core, not a client: the bell is the application's guarantee and must ring even when
 no client is open. Spawned detached by Core (start and resume) as `python -m workbell.core.timer
-<interval_id> [<data_dir>]`. Exits as soon as the interval is gone or no longer running; every
+<interval_id> [<data_dir>]`; it forks once more and the spawned process exits, so the timer proper
+is a child of launchd. Exits as soon as the interval is gone or no longer running; every
 write is guarded by `status = 'running'` in SQL, so racing with pause/delete/recovery is safe.
 
 For its whole life the timer holds an exclusive flock on timer.lock: the kernel keeps the
@@ -11,6 +12,7 @@ recovery tells a frozen timer (sleep — the gap counts as work) from a dead one
 the gap is dropped).
 """
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -25,7 +27,14 @@ POLL_SEC = 1.0  # how often the interval row is re-read
 
 def main() -> None:
     interval_id = int(sys.argv[1])
-    core = Core(Path(sys.argv[2]) if len(sys.argv) > 2 else Core.DEFAULT_DATA_DIR)
+    data_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Core.DEFAULT_DATA_DIR
+    # Double fork: Core waits for this process, which exits at once, and the forked child is
+    # reparented to launchd. Without it a long-lived spawner (the tray) never reaps the timer,
+    # and a paused interval leaves a zombie behind. Forked here, not in Core: Core also runs
+    # inside the tray, where AppKit makes fork() unsafe; this process is fresh and single-threaded.
+    if os.fork() != 0:
+        return
+    core = Core(data_dir)
     # Blocking acquire: the predecessor timer of the same interval (pause→resume within a
     # second) may still be finishing its last poll; waiting out its exit is the correct move.
     lock = acquire_pid_lock(core.timer_lock, blocking=True)

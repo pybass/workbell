@@ -1,6 +1,6 @@
 [project]
 name = "workbell"
-version = "0.1.0"
+version = "0.1.1"
 description = "Work-interval timer."
 readme = "README.md"
 authors = [{ name = "pybass" }]

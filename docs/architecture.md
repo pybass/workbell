@@ -43,7 +43,9 @@ interval — `sys.executable -m workbell.core.timer <interval_id> [<data_dir>]` 
 with its own DB connection. The data dir is omitted when it is the default one,
 so the common case stays readable in `ps`; the child then resolves the default
 itself. Core spawns it, not clients, so every client gets identical behavior;
-`-m` needs no PATH, no binary, no hidden CLI command. The
+`-m` needs no PATH, no binary, no hidden CLI command. The timer forks once
+more and the spawned process exits, so the timer proper is a child of launchd
+and a long-lived client never has to reap it. The
 whole algorithm ([timer.py](../src/workbell/core/timer.py)):
 
 ```

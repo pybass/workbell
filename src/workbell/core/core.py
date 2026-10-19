@@ -305,11 +305,13 @@ class Core:
         # stdout/stderr go to errors.log, not DEVNULL: the timer has no terminal, and its crash
         # traceback must survive somewhere the user can find. The parent handle closes right
         # after the spawn; the child keeps its inherited descriptor.
+        # run(), not Popen: the timer forks and the spawned process exits at once, so nothing is left to reap.
         with self.errors_log.open("ab") as log:
-            subprocess.Popen(  # noqa: S603
+            subprocess.run(  # noqa: S603
                 [sys.executable, "-m", "workbell.core.timer", str(interval_id), *self.data_dir_argv],
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=log,
                 start_new_session=True,
+                check=False,
             )
