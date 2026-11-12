@@ -1,11 +1,12 @@
 import subprocess
 import sys
+from pathlib import Path
 
 
 class TestCrashLogging:
     """The real `python -m workbell.core.timer`, spawned the way Core._spawn_timer wires it."""
 
-    def test_crash_lands_in_errors_log(self, tmp_path):
+    def test_crash_lands_in_errors_log(self, tmp_path: Path) -> None:
         """A crashing timer (non-numeric interval id) leaves the crash header and the traceback in errors.log.
 
         The bad argv makes the timer die before it touches the lock or the database.

@@ -42,7 +42,7 @@ class TestParseDuration:
             ("0s", 0),
         ],
     )
-    def test_parses(self, text, expected):
+    def test_parses(self, text: str, expected: int) -> None:
         """A bare number is minutes; h/m/s components are exact and any of them may be skipped."""
         assert parse_duration(text) == expected
 
@@ -61,7 +61,7 @@ class TestParseDuration:
             "٢٥",  # non-ASCII digits: int() would accept them, the isascii guard refuses
         ],
     )
-    def test_rejects(self, text):
+    def test_rejects(self, text: str) -> None:
         """Anything that is not a bare number or an ordered h/m/s string is refused."""
         with pytest.raises(AppError, match="not a duration"):
             parse_duration(text)
@@ -78,7 +78,7 @@ class TestFormatTimestamp:
             ("Europe/Berlin", 1_689_000_000, "2023-07-10 16:40"),  # CEST: the DST offset of that instant
         ],
     )
-    def test_localizes(self, tz, ts, expected):
+    def test_localizes(self, tz: str, ts: int, expected: str) -> None:
         """The rendering follows the local timezone of the moment, DST included."""
         with pinned_tz(tz):
             assert format_timestamp(ts) == expected

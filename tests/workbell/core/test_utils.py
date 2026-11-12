@@ -1,6 +1,7 @@
 import fcntl
 import os
 import re
+from pathlib import Path
 
 import pytest
 
@@ -22,19 +23,19 @@ class TestFormatHms:
             (36000, "10:00:00"),
         ],
     )
-    def test_formats(self, sec, expected):
+    def test_formats(self, sec: int, expected: str) -> None:
         """Boundary values on both sides of the minute and hour switches."""
         assert format_hms(sec) == expected
 
 
 class TestCrashHeader:
-    def test_crash_header(self, capsys):
+    def test_crash_header(self, capsys: pytest.CaptureFixture[str]) -> None:
         print_crash_header("timer")
         assert re.fullmatch(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] timer crashed:\n", capsys.readouterr().err)
 
 
 class TestPidLock:
-    def test_acquire_and_probe(self, tmp_path):
+    def test_acquire_and_probe(self, tmp_path: Path) -> None:
         path = tmp_path / "test.lock"
         handle = acquire_pid_lock(path)
         assert handle is not None
@@ -42,7 +43,7 @@ class TestPidLock:
         handle.close()
         assert lock_holder_pid(path) is None
 
-    def test_second_acquire_fails(self, tmp_path):
+    def test_second_acquire_fails(self, tmp_path: Path) -> None:
         """A second non-blocking acquire on a held lock yields None (flock conflicts across open file descriptions)."""
         path = tmp_path / "test.lock"
         handle = acquire_pid_lock(path)
@@ -52,16 +53,16 @@ class TestPidLock:
         finally:
             handle.close()
 
-    def test_missing_file_is_free(self, tmp_path):
+    def test_missing_file_is_free(self, tmp_path: Path) -> None:
         assert lock_holder_pid(tmp_path / "never.lock") is None
 
-    def test_leftover_file_is_free(self, tmp_path):
+    def test_leftover_file_is_free(self, tmp_path: Path) -> None:
         """A leftover file whose writer died reads as free — truth is the flock probe, not the file content."""
         path = tmp_path / "stale.lock"
         path.write_text("12345")
         assert lock_holder_pid(path) is None
 
-    def test_holder_mid_write_reads_free(self, tmp_path):
+    def test_holder_mid_write_reads_free(self, tmp_path: Path) -> None:
         """A held lock whose PID is not yet written reads as free — the staleness guard covers this startup window."""
         path = tmp_path / "test.lock"
         with path.open("a+") as handle:

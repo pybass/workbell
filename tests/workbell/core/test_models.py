@@ -14,12 +14,12 @@ RUNNING = Interval(
 
 
 class TestEffectiveWorked:
-    def test_running_adds_live_segment(self):
+    def test_running_adds_live_segment(self) -> None:
         assert RUNNING.effective_worked(1_000_250) == 150  # 100 banked + 50 live
 
-    def test_capped_at_duration(self):
+    def test_capped_at_duration(self) -> None:
         assert RUNNING.effective_worked(2_000_000) == 1500
 
-    def test_paused_returns_banked(self):
+    def test_paused_returns_banked(self) -> None:
         paused = replace(RUNNING, status=IntervalStatus.PAUSED, checkpointed_at=None)
         assert paused.effective_worked(2_000_000) == 100

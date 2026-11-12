@@ -9,7 +9,9 @@ the persisted timestamps, never by waiting.
 """
 
 import sqlite3
+from collections.abc import Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -32,13 +34,13 @@ NOON = MIDNIGHT + 12 * 3600
 
 
 @pytest.fixture
-def spawned():
+def spawned() -> list[int]:
     """Interval ids the Core asked to spawn a timer for (recorded by the `core` fixture's patch)."""
     return []
 
 
 @pytest.fixture
-def core(tmp_path, monkeypatch, spawned):
+def core(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawned: list[int]) -> Iterator[Core]:
     """Core on a fresh temporary database, with _spawn_timer stubbed to a recorder (why: the module docstring)."""
     monkeypatch.setattr(Core, "_spawn_timer", lambda _self, interval_id: spawned.append(interval_id))
     instance = Core(tmp_path)
@@ -47,7 +49,7 @@ def core(tmp_path, monkeypatch, spawned):
 
 
 @pytest.fixture
-def db(core):
+def db(core: Core) -> Iterator[sqlite3.Connection]:
     """Second connection to the same database, for backdating timestamps and raw inspection."""
     conn = sqlite3.connect(core._db_path)
     conn.row_factory = sqlite3.Row
@@ -67,19 +69,19 @@ def local_day(ts: int) -> str:
 
 
 class TestMigrations:
-    def test_fresh_database(self, core, db):
+    def test_fresh_database(self, core: Core, db: sqlite3.Connection) -> None:
         """Opening a missing file creates it and applies every migration."""
         assert core._db_path.exists()
         assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
 
-    def test_reopen(self, core, db):
+    def test_reopen(self, core: Core, db: sqlite3.Connection) -> None:
         """A second Core on an already-migrated database finds the schema current and re-runs nothing."""
         Core(core.data_dir).close()
         assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
 
 
 class TestStart:
-    def test_starts_running(self, core):
+    def test_starts_running(self, core: Core) -> None:
         """A new interval is running, with zero banked work and the initial checkpoint stamped at start."""
         interval = core.start_interval(DURATION)
         assert interval.status is IntervalStatus.RUNNING
@@ -88,17 +90,17 @@ class TestStart:
         assert interval.checkpointed_at == interval.started_at
         assert interval.completed_at is None
 
-    def test_spawns_timer(self, core, spawned):
+    def test_spawns_timer(self, core: Core, spawned: list[int]) -> None:
         interval = core.start_interval(DURATION)
         assert spawned == [interval.id]
 
     @pytest.mark.parametrize("duration", [0, -60])
-    def test_rejects_nonpositive_duration(self, core, duration):
+    def test_rejects_nonpositive_duration(self, core: Core, duration: int) -> None:
         with pytest.raises(AppError, match="positive"):
             core.start_interval(duration)
 
     @pytest.mark.parametrize("state", ["running", "paused"])
-    def test_refuses_second_active(self, core, state):
+    def test_refuses_second_active(self, core: Core, state: str) -> None:
         """The database's one-active rule surfaces as AppError while any interval is active."""
         core.start_interval(DURATION)
         if state == "paused":
@@ -106,7 +108,7 @@ class TestStart:
         with pytest.raises(AppError, match="already exists"):
             core.start_interval(DURATION)
 
-    def test_allows_start_after_completion(self, core):
+    def test_allows_start_after_completion(self, core: Core) -> None:
         """A completed interval no longer occupies the active slot."""
         first = core.start_interval(DURATION)
         assert core._complete_interval(first.id)
@@ -115,7 +117,7 @@ class TestStart:
 
 
 class TestPause:
-    def test_credits_live_segment(self, core, db):
+    def test_credits_live_segment(self, core: Core, db: sqlite3.Connection) -> None:
         """Pause banks the unbanked tail into worked_sec and clears checkpointed_at."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, FRESH_BACKDATE_SEC)
@@ -124,24 +126,24 @@ class TestPause:
         assert interval.worked_sec == pytest.approx(FRESH_BACKDATE_SEC, abs=2)
         assert interval.checkpointed_at is None
 
-    def test_caps_at_duration(self, core, db):
+    def test_caps_at_duration(self, core: Core, db: sqlite3.Connection) -> None:
         core.start_interval(5)
         backdate_checkpointed_at(db, FRESH_BACKDATE_SEC)
         interval = core.pause_interval()
         assert interval.worked_sec == 5
 
-    def test_nothing_active(self, core):
+    def test_nothing_active(self, core: Core) -> None:
         with pytest.raises(AppError, match="No active interval"):
             core.pause_interval()
 
-    def test_already_paused(self, core):
+    def test_already_paused(self, core: Core) -> None:
         """Pausing twice is an error, not a silent no-op."""
         core.start_interval(DURATION)
         core.pause_interval()
         with pytest.raises(AppError, match="already paused"):
             core.pause_interval()
 
-    def test_heals_dead_timer(self, core, db):
+    def test_heals_dead_timer(self, core: Core, db: sqlite3.Connection) -> None:
         """Pausing an interval whose timer died succeeds; the dead gap is deliberately not credited."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, STALE_BACKDATE_SEC)
@@ -149,7 +151,7 @@ class TestPause:
         assert interval.status is IntervalStatus.PAUSED
         assert interval.worked_sec == 0
 
-    def test_credits_gap_while_timer_alive(self, core, db):
+    def test_credits_gap_while_timer_alive(self, core: Core, db: sqlite3.Connection) -> None:
         """Pausing across a long gap with a live timer (machine sleep) credits the whole gap as work."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, STALE_BACKDATE_SEC)
@@ -163,30 +165,30 @@ class TestPause:
 
 
 class TestResume:
-    def test_resumes(self, core):
+    def test_resumes(self, core: Core) -> None:
         core.start_interval(DURATION)
         core.pause_interval()
         interval = core.resume_interval()
         assert interval.status is IntervalStatus.RUNNING
         assert interval.checkpointed_at is not None
 
-    def test_spawns_fresh_timer(self, core, spawned):
+    def test_spawns_fresh_timer(self, core: Core, spawned: list[int]) -> None:
         interval = core.start_interval(DURATION)
         core.pause_interval()
         core.resume_interval()
         assert spawned == [interval.id, interval.id]
 
-    def test_nothing_active(self, core):
+    def test_nothing_active(self, core: Core) -> None:
         with pytest.raises(AppError, match="No active interval"):
             core.resume_interval()
 
-    def test_already_running(self, core):
+    def test_already_running(self, core: Core) -> None:
         """Resuming a running interval is an error, not a silent no-op."""
         core.start_interval(DURATION)
         with pytest.raises(AppError, match="already running"):
             core.resume_interval()
 
-    def test_revives_dead_timer(self, core, db, spawned):
+    def test_revives_dead_timer(self, core: Core, db: sqlite3.Connection, spawned: list[int]) -> None:
         """Resume heals a crashed running interval, credits nothing for the gap, and re-spawns the timer."""
         interval = core.start_interval(DURATION)
         backdate_checkpointed_at(db, STALE_BACKDATE_SEC)
@@ -199,21 +201,21 @@ class TestResume:
 
 
 class TestGetInterval:
-    def test_by_id(self, core):
+    def test_by_id(self, core: Core) -> None:
         interval = core.start_interval(DURATION)
         assert core._get_interval(interval.id) == interval
 
-    def test_missing(self, core):
+    def test_missing(self, core: Core) -> None:
         """A nonexistent id yields None, not an error (the timer polls a possibly-deleted row)."""
         assert core._get_interval(999) is None
 
 
 class TestGetActive:
-    def test_none_when_empty(self, core):
+    def test_none_when_empty(self, core: Core) -> None:
         assert core.get_active_interval() is None
 
     @pytest.mark.parametrize("state", ["running", "paused"])
-    def test_returns_active(self, core, state):
+    def test_returns_active(self, core: Core, state: str) -> None:
         """Both running and paused intervals count as active."""
         interval = core.start_interval(DURATION)
         if state == "paused":
@@ -222,12 +224,12 @@ class TestGetActive:
         assert active is not None
         assert active.id == interval.id
 
-    def test_none_when_completed(self, core):
+    def test_none_when_completed(self, core: Core) -> None:
         interval = core.start_interval(DURATION)
         core._complete_interval(interval.id)
         assert core.get_active_interval() is None
 
-    def test_heals_stale_running(self, core, db):
+    def test_heals_stale_running(self, core: Core, db: sqlite3.Connection) -> None:
         """A crashed running interval reads as paused."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, STALE_BACKDATE_SEC)
@@ -235,7 +237,7 @@ class TestGetActive:
         assert active is not None
         assert active.status is IntervalStatus.PAUSED
 
-    def test_heals_at_exact_threshold(self, core, db):
+    def test_heals_at_exact_threshold(self, core: Core, db: sqlite3.Connection) -> None:
         """checkpointed_at exactly TIMER_STALE_SEC old already counts as dead (inclusive boundary)."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, TIMER_STALE_SEC)
@@ -243,7 +245,7 @@ class TestGetActive:
         assert active is not None
         assert active.status is IntervalStatus.PAUSED
 
-    def test_keeps_fresh_running(self, core, db):
+    def test_keeps_fresh_running(self, core: Core, db: sqlite3.Connection) -> None:
         """A recently checkpointed interval proves its timer alive and stays running."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, 5)
@@ -251,7 +253,7 @@ class TestGetActive:
         assert active is not None
         assert active.status is IntervalStatus.RUNNING
 
-    def test_no_heal_while_timer_lock_held(self, core, db):
+    def test_no_heal_while_timer_lock_held(self, core: Core, db: sqlite3.Connection) -> None:
         """A held timer.lock (live timer frozen by machine sleep) blocks the heal despite staleness."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, STALE_BACKDATE_SEC)
@@ -269,7 +271,7 @@ class TestGetActive:
 
 
 class TestListRecent:
-    def test_newest_first(self, core):
+    def test_newest_first(self, core: Core) -> None:
         """Intervals come back newest first, the active one included."""
         first = core.start_interval(DURATION)
         core._complete_interval(first.id)
@@ -278,18 +280,18 @@ class TestListRecent:
         third = core.start_interval(DURATION)
         assert [interval.id for interval in core.list_recent_intervals(10)] == [third.id, second.id, first.id]
 
-    def test_limit(self, core):
+    def test_limit(self, core: Core) -> None:
         for _ in range(3):
             interval = core.start_interval(DURATION)
             core._complete_interval(interval.id)
         assert len(core.list_recent_intervals(2)) == 2
 
     @pytest.mark.parametrize("limit", [0, -1])
-    def test_rejects_nonpositive_limit(self, core, limit):
+    def test_rejects_nonpositive_limit(self, core: Core, limit: int) -> None:
         with pytest.raises(AppError, match="positive"):
             core.list_recent_intervals(limit)
 
-    def test_heals_stale_running(self, core, db):
+    def test_heals_stale_running(self, core: Core, db: sqlite3.Connection) -> None:
         """A crashed running interval must not be listed as running."""
         core.start_interval(DURATION)
         backdate_checkpointed_at(db, STALE_BACKDATE_SEC)
@@ -299,7 +301,7 @@ class TestListRecent:
 class TestCheckpoint:
     """The timer's periodic fold of the live segment into worked_sec."""
 
-    def test_folds_segment(self, core, db):
+    def test_folds_segment(self, core: Core, db: sqlite3.Connection) -> None:
         """Checkpoint banks the elapsed tail and stamps a fresh checkpoint at now."""
         interval = core.start_interval(DURATION)
         backdate_checkpointed_at(db, FRESH_BACKDATE_SEC)
@@ -310,7 +312,7 @@ class TestCheckpoint:
         assert checked.checkpointed_at is not None
         assert checked.checkpointed_at >= interval.started_at  # restamped, no longer backdated
 
-    def test_caps_at_duration(self, core, db):
+    def test_caps_at_duration(self, core: Core, db: sqlite3.Connection) -> None:
         """Banked work never exceeds the plan; completion stays the timer's separate decision."""
         interval = core.start_interval(5)
         backdate_checkpointed_at(db, FRESH_BACKDATE_SEC)
@@ -320,20 +322,20 @@ class TestCheckpoint:
         assert checked.worked_sec == 5
         assert checked.status is IntervalStatus.RUNNING
 
-    def test_noop_when_paused(self, core):
+    def test_noop_when_paused(self, core: Core) -> None:
         """A checkpoint racing a pause loses and changes nothing."""
         interval = core.start_interval(DURATION)
         paused = core.pause_interval()
         core._checkpoint_interval(interval.id)
         assert core._get_interval(interval.id) == paused
 
-    def test_noop_for_missing_id(self, core):
+    def test_noop_for_missing_id(self, core: Core) -> None:
         """A checkpoint racing a delete loses silently — not raising is the assertion."""
         core._checkpoint_interval(999)
 
 
 class TestComplete:
-    def test_completes(self, core):
+    def test_completes(self, core: Core) -> None:
         """Completion credits the full plan and stamps completed_at."""
         interval = core.start_interval(DURATION)
         assert core._complete_interval(interval.id) is True
@@ -344,7 +346,7 @@ class TestComplete:
         assert completed.completed_at is not None
         assert completed.checkpointed_at is None
 
-    def test_false_when_not_running(self, core):
+    def test_false_when_not_running(self, core: Core) -> None:
         """A completion racing a pause (or a delete) reports the lost race instead of raising."""
         interval = core.start_interval(DURATION)
         core.pause_interval()
@@ -355,7 +357,7 @@ class TestComplete:
 class TestTimerTick:
     """One timer poll: complete when the time is worked, checkpoint on cadence, stop when not running."""
 
-    def test_continue_untouched_before_cadence(self, core, db):
+    def test_continue_untouched_before_cadence(self, core: Core, db: sqlite3.Connection) -> None:
         """A live segment younger than the cadence is left unbanked: CONTINUE with the row untouched."""
         interval = core.start_interval(DURATION)
         backdate_checkpointed_at(db, CHECKPOINT_EVERY_SEC // 2)
@@ -365,7 +367,7 @@ class TestTimerTick:
         assert after.worked_sec == 0
         assert after.checkpointed_at == interval.started_at - CHECKPOINT_EVERY_SEC // 2  # not restamped
 
-    def test_continue_checkpoints_on_cadence(self, core, db):
+    def test_continue_checkpoints_on_cadence(self, core: Core, db: sqlite3.Connection) -> None:
         """A segment past the cadence is banked and restamped, and the tick still says CONTINUE."""
         interval = core.start_interval(DURATION)
         backdate_checkpointed_at(db, FRESH_BACKDATE_SEC)  # over one cadence old, far under the plan
@@ -376,7 +378,7 @@ class TestTimerTick:
         assert after.checkpointed_at is not None
         assert after.checkpointed_at >= interval.started_at  # restamped, no longer backdated
 
-    def test_completed_when_time_worked(self, core, db):
+    def test_completed_when_time_worked(self, core: Core, db: sqlite3.Connection) -> None:
         """When the live tail covers the plan, the tick completes the interval — the ring-the-bell signal."""
         interval = core.start_interval(5)
         backdate_checkpointed_at(db, FRESH_BACKDATE_SEC)
@@ -386,7 +388,7 @@ class TestTimerTick:
         assert after.status is IntervalStatus.COMPLETED
 
     @pytest.mark.parametrize("state", ["paused", "completed", "deleted"])
-    def test_stop_when_not_running(self, core, state):
+    def test_stop_when_not_running(self, core: Core, state: str) -> None:
         """Paused, completed, or deleted: the interval is no longer the timer's to supervise."""
         interval = core.start_interval(DURATION)
         if state == "paused":
@@ -400,7 +402,7 @@ class TestTimerTick:
 
 class TestDelete:
     @pytest.mark.parametrize("status", [IntervalStatus.RUNNING, IntervalStatus.PAUSED, IntervalStatus.COMPLETED])
-    def test_deletes_any_status(self, core, status):
+    def test_deletes_any_status(self, core: Core, status: IntervalStatus) -> None:
         interval = core.start_interval(DURATION)
         if status is IntervalStatus.PAUSED:
             core.pause_interval()
@@ -409,11 +411,11 @@ class TestDelete:
         core.delete_interval(interval.id)
         assert core._get_interval(interval.id) is None
 
-    def test_missing(self, core):
+    def test_missing(self, core: Core) -> None:
         with pytest.raises(AppError, match="does not exist"):
             core.delete_interval(999)
 
-    def test_frees_the_active_slot(self, core):
+    def test_frees_the_active_slot(self, core: Core) -> None:
         interval = core.start_interval(DURATION)
         core.delete_interval(interval.id)
         assert core.start_interval(DURATION).status is IntervalStatus.RUNNING
@@ -423,14 +425,14 @@ class TestCancel:
     """The guarded delete behind the cancel command: only not-yet-completed intervals."""
 
     @pytest.mark.parametrize("state", ["running", "paused"])
-    def test_cancels_active(self, core, state):
+    def test_cancels_active(self, core: Core, state: str) -> None:
         interval = core.start_interval(DURATION)
         if state == "paused":
             core.pause_interval()
         core.cancel_interval(interval.id)
         assert core._get_interval(interval.id) is None
 
-    def test_refuses_completed(self, core):
+    def test_refuses_completed(self, core: Core) -> None:
         """An interval that completed meanwhile (the confirmation window) survives untouched."""
         interval = core.start_interval(DURATION)
         assert core._complete_interval(interval.id)
@@ -440,7 +442,7 @@ class TestCancel:
         assert after is not None
         assert after.status is IntervalStatus.COMPLETED
 
-    def test_missing(self, core):
+    def test_missing(self, core: Core) -> None:
         with pytest.raises(AppError, match="no longer active"):
             core.cancel_interval(999)
 
@@ -448,7 +450,7 @@ class TestCancel:
 class TestCountTodayCompleted:
     """Counting completed intervals started in the local calendar day of a given now."""
 
-    def test_empty(self, core):
+    def test_empty(self, core: Core) -> None:
         assert core.count_today_completed(NOW) == 0
 
     @pytest.mark.parametrize(
@@ -456,7 +458,7 @@ class TestCountTodayCompleted:
         [(NOW, 1), (MIDNIGHT, 1), (MIDNIGHT - 1, 0), (NOW + 86_400, 0)],
         ids=["now", "midnight", "before-midnight", "next-day"],
     )
-    def test_local_day_boundary(self, core, db, started_at, expected):
+    def test_local_day_boundary(self, core: Core, db: sqlite3.Connection, started_at: int, expected: int) -> None:
         """Day equality in local time, not a 24-hour window: midnight is the inclusive edge."""
         interval = core.start_interval(DURATION)
         assert core._complete_interval(interval.id)
@@ -464,7 +466,7 @@ class TestCountTodayCompleted:
         db.commit()
         assert core.count_today_completed(NOW) == expected
 
-    def test_counts_each_completion(self, core, db):
+    def test_counts_each_completion(self, core: Core, db: sqlite3.Connection) -> None:
         """Every completed interval started today counts once; other days' starts do not."""
         ids = []
         for _ in range(3):
@@ -480,15 +482,15 @@ class TestCountTodayCompleted:
 class TestListDailyStats:
     """Per-day totals for stats: grouping by local start day, zero rows for the active interval, the limit."""
 
-    def test_empty(self, core):
+    def test_empty(self, core: Core) -> None:
         assert core.list_daily_stats(5) == []
 
     @pytest.mark.parametrize("limit", [0, -5])
-    def test_rejects_nonpositive_limit(self, core, limit):
+    def test_rejects_nonpositive_limit(self, core: Core, limit: int) -> None:
         with pytest.raises(AppError, match="positive"):
             core.list_daily_stats(limit)
 
-    def test_groups_by_start_day(self, core, db):
+    def test_groups_by_start_day(self, core: Core, db: sqlite3.Connection) -> None:
         """Completions started the same local day merge into one row (worked summed); days come newest first."""
         ids = []
         for duration in (600, 900, 1200):
@@ -503,7 +505,7 @@ class TestListDailyStats:
             DailyStats(day=local_day(NOON - 2 * 86_400), completed=1, worked_sec=1200),
         ]
 
-    def test_active_interval_yields_zero_row(self, core, db):
+    def test_active_interval_yields_zero_row(self, core: Core, db: sqlite3.Connection) -> None:
         """A day holding only the active interval appears with zero totals; its worked_sec does not leak in."""
         interval = core.start_interval(DURATION)
         assert core._complete_interval(interval.id)
@@ -517,7 +519,7 @@ class TestListDailyStats:
             DailyStats(day=local_day(NOON - 86_400), completed=1, worked_sec=DURATION),
         ]
 
-    def test_limit_keeps_newest_days(self, core, db):
+    def test_limit_keeps_newest_days(self, core: Core, db: sqlite3.Connection) -> None:
         """The limit counts recorded days and drops the oldest ones."""
         ids = []
         for _ in range(3):
@@ -531,37 +533,37 @@ class TestListDailyStats:
 
 
 class TestSettings:
-    def test_seeded_defaults(self, core):
+    def test_seeded_defaults(self, core: Core) -> None:
         """A fresh database is seeded with 25 minutes, the bell's fallback sound, and the banner style."""
         assert core.get_settings() == Settings(
             default_duration_sec=1500, bell_sound=bell.DEFAULT_SOUND, notification_style=NotificationStyle.BANNER
         )
 
-    def test_set_default_duration(self, core):
+    def test_set_default_duration(self, core: Core) -> None:
         assert core.set_default_duration(2700).default_duration_sec == 2700
         assert core.get_settings().default_duration_sec == 2700
 
     @pytest.mark.parametrize("duration", [0, -60])
-    def test_rejects_nonpositive_duration(self, core, duration):
+    def test_rejects_nonpositive_duration(self, core: Core, duration: int) -> None:
         with pytest.raises(AppError, match="positive"):
             core.set_default_duration(duration)
 
-    def test_set_bell_sound_case_insensitive(self, core):
+    def test_set_bell_sound_case_insensitive(self, core: Core) -> None:
         """The name matches case-insensitively against the installed sounds and is stored canonically."""
         canonical = next(s for s in bell.available_sounds() if s != s.lower())  # a name whose spelling can be mangled
         assert core.set_bell_sound(canonical.lower()).bell_sound == canonical
         assert core.get_settings().bell_sound == canonical
 
-    def test_set_bell_sound_unknown(self, core):
+    def test_set_bell_sound_unknown(self, core: Core) -> None:
         with pytest.raises(AppError, match="Unknown sound"):
             core.set_bell_sound("NoSuchSound")
 
-    def test_set_notification_style_case_insensitive(self, core):
+    def test_set_notification_style_case_insensitive(self, core: Core) -> None:
         """The style matches case-insensitively and is stored canonically."""
         assert core.set_notification_style("DIALOG").notification_style is NotificationStyle.DIALOG
         assert core.get_settings().notification_style is NotificationStyle.DIALOG
 
-    def test_set_notification_style_unknown(self, core):
+    def test_set_notification_style_unknown(self, core: Core) -> None:
         """A style outside the known ones is refused, naming the choices."""
         with pytest.raises(AppError, match=r"Unknown style.*banner, dialog"):
             core.set_notification_style("popup")
